@@ -102,9 +102,9 @@ class Mod3VertexWeightBase(CS.PyCStruct):
         self.bits = self.tenBitWeight>>30 #
         """
         There's only two models that use this 2 bits for anything besides 0s
-        E:\MHW\Merged\em\em106\00\mod\em106_00_kazan.mod3
+        E:/MHW/Merged/em/em106/00/mod/em106_00_kazan.mod3
         Zorah Magdaros Map Shell
-        E:\MHW\Merged\Assets\evm\evm091\evm091_00\mod\evm091_00.mod3 
+        E:/MHW/Merged/Assets/evm/evm091/evm091_00/mod/evm091_00.mod3
         A Xenojiiva model that's not the main xenojiiva model (WHY THE FUCK IS IT IN ASSETS?!)
         """
         
@@ -203,6 +203,7 @@ class Mod3Vertex():
                 [x.marshall(data) for x in attribute]
 
     def construct(self, data):
+        data = dict(data)
         data["weights"],data["boneIds"] = [w for i,w in data["weights"]],[i for i,w in data["weights"]]
         for field in self.fields:
             attribute = self.__getattribute__(field)
@@ -210,6 +211,25 @@ class Mod3Vertex():
                 attribute.construct(data[field])
             else:
                 [x.construct(datum) for x,datum in zip(attribute,data[field])]
+
+    def verify(self):
+        import math
+        for field in self.fields:
+            value = getattr(self, field)
+            values = value if isinstance(value, list) else [value]
+            for item in values:
+                if field == "weights":
+                    if len(item.weights) != self.blockType["weights"] or not all(math.isfinite(w) for w in item.weights):
+                        raise ValueError("Invalid vertex weight values/count")
+                else:
+                    item.verify()
+        if len(self.uvs) != self.blockType["uvs"]:
+            raise ValueError("Invalid UV count")
+        for value in (self.position.x, self.position.y, self.position.z,
+                      *(v for uv in self.uvs for v in (uv.uvX, uv.uvY))):
+            if not math.isfinite(value):
+                raise ValueError("Non-finite vertex position or UV")
+        self.serialize()  # Check integer ranges and every fixed-size field.
 
     def serialize(self):
         result = bytearray()

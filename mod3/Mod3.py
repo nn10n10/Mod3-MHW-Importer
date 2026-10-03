@@ -29,6 +29,7 @@ class Mod3():
     def marshall(self, data):
         self.Header = self.Header()
         self.Header.marshall(data)
+        self.validateHeader(len(data))
         data.seek(self.Header.boneOffset)
         self.Skeleton = self.Skeleton(self.Header.boneCount)
         self.Skeleton.marshall(data)
@@ -41,9 +42,29 @@ class Mod3():
         data.seek(self.Header.meshOffset)
         self.MeshParts = self.MeshParts(self.Header.meshCount, self.Header.vertexOffset, self.Header.facesOffset)
         self.MeshParts.marshall(data)
+        if any(mesh.Header.materialIdx >= self.Header.materialCount for mesh in self.MeshParts):
+            raise ValueError("Mesh material index outside material table")
         data.seek(self.Header.trailOffset)
         self.Trailing = self.Trailing()
         self.Trailing.marshall(data)
+
+    def validateHeader(self, file_size):
+        h = self.Header
+        if (h.id, h.version, h.version2) != (0x444F4D, 237, 0):
+            raise ValueError("Unsupported MOD3 magic/version")
+        if any(getattr(h, name) < 0 for name in ("vertexCount", "faceCount", "vertexBufferSize", "secondBufferSize")):
+            raise ValueError("Negative MOD3 count or buffer size")
+        regions = [(h.boneOffset, h.boneCount * (24 + 128) + (512 if h.boneCount else 0)),
+                   (h.groupOffset, h.groupCount * 32),
+                   (h.materialNamesOffset, h.materialCount * 128),
+                   (h.meshOffset, h.meshCount * len(Mod3M.Mod3MeshPartHeader()) + 4),
+                   (h.vertexOffset, h.vertexBufferSize), (h.facesOffset, h.faceCount * 2),
+                   (h.trailOffset, 0)]
+        for offset, size in regions:
+            if offset > file_size or size > file_size - offset or (size and offset < len(h)):
+                raise ValueError("MOD3 section outside file/header bounds")
+        # Keep upstream's support for shared/adjusted vertex ranges; don't infer
+        # undocumented layout constraints from header counts alone.
 
     def construct(self, fileHeader, materials, groupStuff, skeleton, lmatrices, amatrices, meshparts, trailingData):
         self.Header = self.Header()

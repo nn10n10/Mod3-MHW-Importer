@@ -5,6 +5,7 @@ Created on Mon Jan 28 13:38:38 2019
 @author: AsteriskAmpersand
 """
 import struct
+from copy import deepcopy
 from collections import OrderedDict
 from binascii import hexlify
 
@@ -14,50 +15,16 @@ def chunks(l, n):
         yield l[i:i + n]
 
 def HalfToFloat(h):
-    s = int((h >> 15) & 0x00000001)    # sign
-    e = int((h >> 10) & 0x0000001f)    # exponent
-    f = int(h & 0x000003ff)            # fraction
-    if s==0 and e==0 and f==0:
-        return 0
-    return (-1)**s*2**(e-15)*(f/(2**10)+1)
+    return struct.unpack('<e', struct.pack('<H', h))[0]
+
 
 def minifloatDeserialize(x):
-    v = struct.unpack('H', x)
-    return HalfToFloat(v[0])
-#   x = HalfToFloat(v[0])
-#    # hack to coerce int to float
-#    bstring = struct.pack('I',x)
-#    f=struct.unpack('f', bstring)
-#    return f[0]
+    return struct.unpack('<e', x)[0]
+
 
 def minifloatSerialize(x):
-    F16_EXPONENT_BITS = 0x1F
-    F16_EXPONENT_SHIFT = 10
-    F16_EXPONENT_BIAS = 15
-    F16_MANTISSA_BITS = 0x3ff
-    F16_MANTISSA_SHIFT =  (23 - F16_EXPONENT_SHIFT)
-    F16_MAX_EXPONENT =  (F16_EXPONENT_BITS << F16_EXPONENT_SHIFT)
-    a = struct.pack('>f',x)
-    b = hexlify(a)
-    f32 = int(b,16)
-    f16 = 0
-    sign = (f32 >> 16) & 0x8000
-    exponent = ((f32 >> 23) & 0xff) - 127
-    mantissa = f32 & 0x007fffff
-    if exponent == 128:
-    	f16 = sign | F16_MAX_EXPONENT
-    	if mantissa:
-    		f16 |= (mantissa & F16_MANTISSA_BITS)
-    elif exponent > 15:#hack
-    	f16 = sign | F16_MAX_EXPONENT
-    elif exponent >= -15:#hack
-    	exponent += F16_EXPONENT_BIAS
-    	mantissa >>= F16_MANTISSA_SHIFT
-    	f16 = (sign | exponent << F16_EXPONENT_SHIFT | mantissa)
-    else:
-    	f16 = sign
-    return struct.pack('H',f16)
-    
+    return struct.pack('<e', x)
+
 
 class PyCStruct():
     def __init__(self, data = None, **kwargs):
@@ -95,7 +62,7 @@ class PyCStruct():
             if field in data:
                 self.__setattr__(field,data[field])
             elif field in self.defaultProperties:
-                self.__setattr__(field,self.defaultProperties[field])
+                self.__setattr__(field,deepcopy(self.defaultProperties[field]))
             elif field in self.requiredProperties:
                 raise KeyError("Required Property missing in supplied data")
             else:
@@ -110,7 +77,7 @@ class PyCStruct():
         return str({field:(getattr(self,field) if hasattr(self,field) else None) for field in self.fields})
 
 class Cstruct():
-    deserializer = lambda y: {'deserializer':lambda x: struct.unpack(y,x)[0], 'serializer': lambda x: struct.pack(y,x)}
+    deserializer = lambda y: {'deserializer':lambda x: struct.unpack('<'+y,x)[0], 'serializer': lambda x: struct.pack('<'+y,x)}
     CTypes = {"byte":       {'size':1,**deserializer('b')},
                 "int8":     {'size':1,**deserializer('b')},
                 "ubyte":    {'size':1,**deserializer('B')},
@@ -152,13 +119,26 @@ class Cstruct():
         return {
                 'size': intSize*baseTypeCall[base]['size'], 
                 'deserializer': lambda x: [baseTypeCall[base]['deserializer'](chunk) for chunk in chunks(x,baseTypeCall[base]['size']) ], 
-                'serializer':   lambda x: b''.join(map(baseTypeCall[base]['serializer'],x))
+                'serializer':   lambda x: Cstruct.serializeArray(x, intSize, baseTypeCall[base]['serializer'])
                 } if base != "char" else {
                 'size': intSize*baseTypeCall[base]['size'], 
                 'deserializer': lambda x: ''.join([( baseTypeCall[base]['deserializer'](chunk) ).decode("ascii") for chunk in chunks(x,baseTypeCall[base]['size']) ]), 
-                'serializer':   lambda x: x.encode('ascii').ljust(intSize, b'\x00')
+                'serializer':   lambda x: Cstruct.serializeString(x, intSize)
                 }
                 
+    @staticmethod
+    def serializeArray(values, count, serializer):
+        if len(values) != count:
+            raise ValueError("Array length does not match declared field size")
+        return b''.join(map(serializer, values))
+
+    @staticmethod
+    def serializeString(value, count):
+        encoded = value.encode('ascii')
+        if len(encoded) > count:
+            raise ValueError("String exceeds declared field size")
+        return encoded.ljust(count, b'\x00')
+
     def __init__(self, fields):
        self.struct = OrderedDict()
        self.initialized = True

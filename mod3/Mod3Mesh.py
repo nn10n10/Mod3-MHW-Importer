@@ -6,7 +6,6 @@ Created on Tue Mar  5 22:36:21 2019
 """
 
 from collections import OrderedDict, Counter
-from mathutils import Vector, Matrix
 try:
     from ..common import Cstruct as CS
     from ..mod3.Mod3VertexBuffers import Mod3Vertex
@@ -92,6 +91,14 @@ class Mod3Mesh():
 
     def marshall(self, data):
         self.Header.marshall(data)
+        if self.Header.faceCount % 3:
+            raise ValueError("Face index count is not divisible by three")
+        if self.Header.blocktype not in Mod3Vertex.blocklist:
+            raise ValueError("Unknown vertex block type")
+        if self.Header.blockSize != len(Mod3Vertex(self.Header.blocktype)):
+            raise ValueError("Vertex block size mismatch")
+        if self.Header.faceCount * 2 > len(data) - self.faceOffset - self.Header.faceOffset * 2:
+            raise ValueError("Face buffer exceeds file")
         position = data.tell()
         self.Faces = [Mod3Face() for _ in range(self.Header.faceCount//3)]
         data.seek(self.faceOffset+self.Header.faceOffset*2)
@@ -116,6 +123,8 @@ class Mod3Mesh():
                 face.adjust(adj)
         data.seek((self.vertexOffset+self.Header.vertexOffset) +
                   (self.Header.blockSize*(self.Header.vertexSub+self.Header.vertexBase-adj)))
+        if nvcount * self.Header.blockSize > len(data) - data.tell():
+            raise ValueError("Vertex buffer exceeds file")
         self.Vertices = [Mod3Vertex(self.Header.blocktype)
                          for _ in range(nvcount)]
         self.Header.vertexCount = nvcount
@@ -141,7 +150,12 @@ class Mod3Mesh():
 
     def verify(self):
         self.Header.verify()
-        [(v.verify(), f.verify()) for v, f in zip(self.Vertices, self.Faces)]
+        for vertex in self.Vertices:
+            vertex.verify()
+        for face in self.Faces:
+            face.verify()
+            if any(not 0 <= getattr(face, key) - self.Header.vertexSub < self.vertexCount() for key in face.fields):
+                raise ValueError("Face index outside mesh vertex range")
 
     def serialize(self):
         return self.Header.serialize(), \
@@ -271,7 +285,7 @@ class Mod3Mesh():
             self.Vertices, splitWeights)
         return {"vertices": vertices, "properties": properties, "faces": faces,
                 "weightGroups": weightGroups, "normals": normals, "tangents": tangents,
-                "uvs": uvs, "colour": colour, "boundingBoxes": self.BoundingBoxes}
+                "uvs": uvs, "colour": colour, "boundingBoxes": [box.boundingBox() for box in self.BoundingBoxes]}
 
     def faceCount(self):
         return len(self.Faces)
@@ -300,20 +314,19 @@ class Mod3MeshCollection():
         self.faceOffset = faceOffset
 
     def marshall(self, data):
-        for mesh in self.Meshes:
-            pos = data.tell()
+        for index, mesh in enumerate(self.Meshes):
             try:
                 mesh.marshall(data)
-            except:
-                data.seek(pos+len(Mod3MeshPartHeader()))
+            except (IndexError, KeyError, ValueError) as exc:
+                raise ValueError("Invalid MOD3 mesh %d: %s" % (index, exc)) from exc
         self.BoundingBoxes.marshall(data)
-        BoundingBoxes = iter(self.BoundingBoxes)
-        try:
-            for mesh in self.Meshes:
-                for _ in range(mesh.Header.boundingBoxCount):
-                    mesh.BoundingBoxes.append(next(BoundingBoxes))
-        except:
-            pass
+        assigned = sum(mesh.Header.boundingBoxCount for mesh in self.Meshes)
+        if assigned != self.BoundingBoxes.count:
+            raise ValueError("Inconsistent bounding box counts: meshes reference %d, table contains %d; refusing lossy import" %
+                             (assigned, self.BoundingBoxes.count))
+        boxes = iter(self.BoundingBoxes.BoundingBoxes)
+        for mesh in self.Meshes:
+            mesh.BoundingBoxes = [next(boxes) for _ in range(mesh.Header.boundingBoxCount)]
 
     def serialize(self):
         meshes, vertices, faces = [], [], []
@@ -333,7 +346,8 @@ class Mod3MeshCollection():
             sum(map(lambda x: x["boundingBoxes"], meshparts), []))
 
     def verify(self):
-        [m.verify for m in self.Meshes]
+        for mesh in self.Meshes:
+            mesh.verify()
         self.BoundingBoxes.verify()
 
     def Count(self):
@@ -427,6 +441,7 @@ class Mod3Face(CS.PyCStruct):
 
 class BoundingBox():
     def __init__(self, mod3bb):
+        from mathutils import Vector, Matrix
         self._center = Vector(mod3bb.aabbCenter)
         self._dimensions = Vector(
             (Vector(mod3bb.aabbMax)-Vector(mod3bb.aabbMin))[:3])
@@ -484,6 +499,8 @@ class Mod3BoundingBoxes(CS.PyCStruct):
 
     def marshall(self, data):
         super().marshall(data)
+        if self.count * len(Mod3BoundingBox()) > len(data) - data.tell():
+            raise ValueError("Bounding box table exceeds file")
         self.BoundingBoxes = [Mod3BoundingBox() for _ in range(self.count)]
         [x.marshall(data) for x in self.BoundingBoxes]
 
@@ -516,6 +533,8 @@ class Mod3BoundingBoxes(CS.PyCStruct):
         if self.count == None:
             raise AssertionError("Attribute %s is not initialized." % "count")
         super().verify()
+        for box in self.BoundingBoxes:
+            box.verify()
 
     def __iter__(self):
         return iter(self.boundingBoxes())

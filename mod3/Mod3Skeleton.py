@@ -27,7 +27,7 @@ class Mod3Bone(CS.PyCStruct):
             ("y","float"),
             ("z","float")  
             ])
-    requiredPropeties = {f for f in fields}
+    requiredProperties = {f for f in fields}
     
     def __init__(self, data = None, **kwargs):
         super().__init__(data, **kwargs)
@@ -127,10 +127,25 @@ class Mod3SkelletalStructure():
         self.Skeleton.marshall(data)
         self.Matrices.marshall(data)
         self.BoneMap.marshall(data)
-        
+        self.validateHierarchy()
+
+    def validateHierarchy(self):
+        count = self.Count()
+        for index, bone in enumerate(self.Skeleton):
+            if bone.child != 255 and not 0 <= bone.child < count:
+                raise ValueError("Symmetric bone index outside skeleton")
+            seen = {index}
+            parent = bone.parentId
+            while parent != 255:
+                if not 0 <= parent < count or parent in seen:
+                    raise ValueError("Invalid or cyclic skeleton parent hierarchy")
+                seen.add(parent)
+                parent = self.Skeleton[parent].parentId
+
     def construct(self, skeleton, lmatrices, amatrices):
         self.Skeleton.construct(skeleton) 
         self.Matrices.construct(lmatrices, amatrices)
+        self.validateHierarchy()
         self.foldSkeletonToMap()
     
     def serialize(self):
@@ -187,7 +202,15 @@ class Mod3BoneMap(CS.PyCStruct):
                 raise ValueError("Bone %d has multiple functions assigned by the BoneMap."%mapping)
             
     def fold(self, skeleton):#skeleton with custom property to bonemap)
+        if skeleton.Count() > 255:
+            raise ValueError("Skeleton exceeds byte bone index range (255 is reserved)")
         self.boneRemap = [255]*self.boneRemapCount
+        used = set()
         for bIndex, bone in enumerate(skeleton):
-            if not bone.boneFunction == 512:
-                self.boneRemap[bone.boneFunction] = bIndex
+            function = bone.boneFunction
+            if function == 512:
+                continue
+            if not 0 <= function < 512 or function in used:
+                raise ValueError("Invalid or duplicate boneFunction")
+            used.add(function)
+            self.boneRemap[function] = bIndex
