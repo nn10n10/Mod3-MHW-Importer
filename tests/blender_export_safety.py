@@ -27,5 +27,17 @@ with tempfile.TemporaryDirectory() as directory:
     try:api.BlenderExporterAPI.uvValues(conflict,None)
     except ValueError:pass
     else:raise AssertionError('UV conflict not rejected')
+armature=bpy.data.armatures.new('unsupported-skeleton')
+armature_obj=bpy.data.objects.new('unsupported-skeleton',armature)
+bpy.context.scene.collection.objects.link(armature_obj)
+bpy.context.view_layer.objects.active=armature_obj
+armature_obj.select_set(True)
+bpy.ops.object.mode_set(mode='EDIT')
+bone=armature.edit_bones.new('bone');bone.tail=(0,0,1)
+bpy.ops.object.mode_set(mode='OBJECT')
+armature.bones['bone']['boneFunction']=1
+try: api.BlenderExporterAPI.getSkeletalStructure(None)
+except ValueError: pass
+else: raise AssertionError('Unsupported Armature export accepted')
 addon.unregister()
 print('PASS: failure preserves existing output; source transforms/data unchanged; UV conflict rejected')

@@ -183,6 +183,9 @@ class BlenderExporterAPI(ModellingAPI):
     @staticmethod
     def getSkeletalStructure(options):
         skeletonMap = SkeletonMap()
+        if any(obj.type == 'ARMATURE' and any('boneFunction' in bone for bone in obj.data.bones)
+               for obj in bpy.context.scene.objects):
+            raise ValueError("MOD3 export supports EmptyTree skeletons; animation Armature export is not implemented")
         options.errorHandler.setSection("Skeleton")
         rootEmpty = BlenderExporterAPI.getRootEmpty()
         root = options.validateSkeletonRoot(rootEmpty)
@@ -449,6 +452,8 @@ class BlenderExporterAPI(ModellingAPI):
             for vertex in mesh.data.vertices:
                 vert = {}
                 vert["position"] = vertex.co.copy()
+                bits = mesh.data.attributes.get("MOD3_weight_bits")
+                vert["weightBits"] = bits.data[vertex.index].value if bits is not None else 0
                 vert["weights"] = BlenderExporterAPI.weightHandling(vertex.groups, skeletonMap, groupName, options.errorHandler)
                 #Normal Handling
                 options.errorHandler.verifyLoadLoop("normal", vert, vertex, loopNormals, mesh)#vert["normal"] = loopNormals[vertex.index]

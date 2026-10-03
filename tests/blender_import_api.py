@@ -11,6 +11,10 @@ part={"vertices":[(0,0,0),(1,0,0),(0,1,0)],"faces":[(0,1,2)],"properties":{"lod"
 mesh,obj=api.createMesh("test",part)
 api.createTextureLayer("UV0",mesh,[(0,0),(1,0),(0,1)])
 api.setNormals([(0,0,127)]*3,mesh)
+for invalid in [[(0,0,0)]*3, [(float('nan'),0,1)]*3]:
+    try: api.setNormals(invalid,mesh)
+    except ValueError: pass
+    else: raise AssertionError('Invalid normals accepted')
 assert mesh.has_custom_normals
 assert all(abs(n.vector.z-1)<1e-5 for n in mesh.corner_normals)
 assert [tuple(x.uv) for x in mesh.uv_layers[0].data]==[(0,0),(1,0),(0,1)]

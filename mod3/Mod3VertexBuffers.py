@@ -209,6 +209,8 @@ class Mod3Vertex():
             attribute = self.__getattribute__(field)
             if not isIterable(attribute):
                 attribute.construct(data[field])
+                if field == "weights":
+                    attribute.bits = data.get("weightBits", 0)
             else:
                 [x.construct(datum) for x,datum in zip(attribute,data[field])]
 

@@ -10,6 +10,7 @@ import bmesh
 import idprop
 import array
 import os
+import math
 from mathutils import Vector, Matrix
 from collections import OrderedDict
 from pathlib import Path
@@ -135,6 +136,10 @@ class BlenderImporterAPI(ModellingAPI):
             #Weight Handling
             BlenderImporterAPI.dbg.write("\t\tLoading Weights\n")
             BlenderImporterAPI.writeWeights(blenderObject, meshpart, omitEmpty, context)
+            if any(meshpart.get("weightBits", [])):
+                bits = blenderMesh.attributes.new(name="MOD3_weight_bits", type='INT', domain='POINT')
+                for item, value in zip(bits.data, meshpart["weightBits"]):
+                    item.value = value
             #Normals Handling
             BlenderImporterAPI.dbg.write("\t\tLoading Normals\n")
             BlenderImporterAPI.setNormals(meshpart["normals"],blenderMesh)
@@ -359,6 +364,8 @@ class BlenderImporterAPI(ModellingAPI):
         meshpart.update(calc_edges=True)
         if len(normals) != len(meshpart.vertices):
             raise ValueError("Normal count does not match vertex count")
+        if any(not all(math.isfinite(value) for value in normal) or not any(normal) for normal in normals):
+            raise ValueError("Non-finite or zero-length custom normal")
         meshpart.polygons.foreach_set("use_smooth", [True] * len(meshpart.polygons))
         meshpart.normals_split_custom_set_from_vertices([normalize(v) for v in normals])
 

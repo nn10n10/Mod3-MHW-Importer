@@ -31,8 +31,8 @@ def run(source, label):
     before_hash=hashlib.sha256(source.read_bytes()).hexdigest()
     import_opts=dict(clear_scene=True,high_lod=False,import_textures=False,import_materials=False,weight_format='Slash',load_group_functions=True,maximize_clipping=False)
     export_opts=dict(highest_lod=False,coerce_fourth=False,export_bounds='Explicit')
-    original=parse(source.read_bytes())
     assert bpy.ops.custom_import.import_mhw_mod3(filepath=str(source),**import_opts)=={'FINISHED'}
+    original=parse(source.read_bytes())
     before=[(obj.name,obj.matrix_world.copy(),obj.data.name if obj.data else None) for obj in bpy.context.scene.objects]
     counts=(len(bpy.data.objects),len(bpy.data.meshes))
     assert bpy.ops.custom_export.export_mhw_mod3(filepath=str(a),**export_opts)=={'FINISHED'}
@@ -54,6 +54,10 @@ for block in Mod3Vertex.blocklist:
     source=out/('synthetic-%08x.mod3'%block);source.write_bytes(fixture(block).serialize())
     try:results.append(run(source,'synthetic-%08x'%block))
     except Exception:results.append({"name":str(block),"status":"FAIL","error":traceback.format_exc()})
+for block in [0xf637401c,0x81f58067]:
+    source=out/('flags-%08x.mod3'%block);source.write_bytes(fixture(block, weight_bits=2).serialize())
+    try:results.append(run(source,'flags-%08x'%block))
+    except Exception:results.append({"name":'flags-%08x'%block,"status":"FAIL","error":traceback.format_exc()})
 if opts.samples:
     for source in sorted(Path(opts.samples).rglob('*.mod3')):
         try:results.append(run(source,source.stem))

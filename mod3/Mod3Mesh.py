@@ -285,7 +285,8 @@ class Mod3Mesh():
             self.Vertices, splitWeights)
         return {"vertices": vertices, "properties": properties, "faces": faces,
                 "weightGroups": weightGroups, "normals": normals, "tangents": tangents,
-                "uvs": uvs, "colour": colour, "boundingBoxes": [box.boundingBox() for box in self.BoundingBoxes]}
+                "uvs": uvs, "colour": colour,
+                "weightBits": [vertex.weights.bits if hasattr(vertex, "weights") else 0 for vertex in self.Vertices], "boundingBoxes": [box.boundingBox() for box in self.BoundingBoxes]}
 
     def faceCount(self):
         return len(self.Faces)
