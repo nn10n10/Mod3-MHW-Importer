@@ -37,7 +37,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from numpy import zeros,math,unique,array,transpose,dot,nanmin,nanmax
+import math
+from numpy import zeros,unique,array,transpose,dot,nanmin,nanmax
 
 def calculateMSBR(hull_points_2d):
     #print "Input convex hull points: "
