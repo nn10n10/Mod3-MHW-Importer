@@ -11,6 +11,7 @@ from bpy.props import EnumProperty, BoolProperty, StringProperty
 from bpy.types import Operator
 
 from ..mod3 import Mod3ExporterLayer as Mod3EL
+from ..mod3.Mod3ExporterErrorHandler import UnexportableError
 from ..blender import BlenderMod3Exporter as Api
 from ..blender.BlenderSupressor import SupressBlenderOps
 
@@ -34,7 +35,7 @@ class ExportMOD3(Operator, ExportHelper):
     highest_lod: BoolProperty(
         name = "Set Meshparts to Highest LOD",
         description = "Overwrites all meshparts' explicit LODs to the highest LOD.",
-        default = True)
+        default = False)
     coerce_fourth: BoolProperty(
         name = "Coerce 4th Negative Weight",
         description = "Forces non-explicit 4 weight vertices into a 4 weight blocktype.",
@@ -76,35 +77,15 @@ class ExportMOD3(Operator, ExportHelper):
         exec("%s : %s"%(prop, propString))
 
     def execute(self,context):
-        self.cleanScene(context)
-        BApi = Api.BlenderExporterAPI()
-        with SupressBlenderOps():
-            try:
-                bpy.ops.object.mode_set(mode='OBJECT')
-            except:
-                pass
-            bpy.ops.object.select_all(action='DESELECT')
-            for obj in bpy.context.scene.objects:
-                obj.select = obj.type == "MESH"
-            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-            bpy.ops.object.select_all(action='DESELECT')
-
-        options = self.parseOptions()
-        Mod3EL.ModelToMod3(BApi, options).execute(self.properties.filepath)
-        with SupressBlenderOps():
-            bpy.ops.object.select_all(action='DESELECT')
-            for ob in bpy.context.selected_objects:
-                ob.select = False
-        #bpy.ops.object.mode_set(mode='OBJECT')
-        #bpy.context.area.type = 'INFO'
+        if context.object is not None and context.object.mode != 'OBJECT':
+            self.report({'ERROR'}, "Switch to Object Mode before MOD3 export")
+            return {'CANCELLED'}
+        try:
+            Mod3EL.ModelToMod3(Api.BlenderExporterAPI(), self.parseOptions()).execute(self.filepath)
+        except (UnexportableError, ValueError, OSError, OverflowError) as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
         return {'FINISHED'}
-
-    @staticmethod
-    def cleanScene(context):
-        data = set(bpy.data.objects)
-        scene = set(bpy.context.scene.objects)
-        for obj in data.difference(scene):
-            bpy.data.objects.remove(obj)    
 
     def parseOptions(self):
         options = {

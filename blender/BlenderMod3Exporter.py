@@ -46,33 +46,29 @@ class MeshClone():
         #self.clone = None
                    
     def __enter__(self):
-        return self.original
-        with SupressBlenderOps():
-            self.copy = self.original.copy()
-            bpy.context.scene.objects.link(self.copy)
-            bpy.context.scene.objects.active = self.copy
-            self.original.select = False
-            self.copy.select = True
-            bpy.ops.object.make_single_user(type='SELECTED_OBJECTS', object=True, obdata=True)
-            for mod in self.copy.modifiers:
-                try:
-                    bpy.ops.object.modifier_apply(modifier = mod.name)
-                except:# Exception as e:
-                    pass
-            #self.copy.select = False
-            #bpy.context.scene.objects.active = None
-        return self.copy
+        if self.original.modifiers:
+            raise ValueError("Apply modifiers explicitly before MOD3 export; automatic evaluation is not supported")
+        transform = self.original.matrix_world.copy()
+        if transform.to_3x3().determinant() <= 1e-12:
+            raise ValueError("Mirrored or singular object transforms are not supported")
+        self.copy = self.original.copy()
+        self.copy.data = self.original.data.copy()
+        try:
+            normals = [transform.to_3x3().inverted().transposed() @ n.vector
+                       for n in self.copy.data.corner_normals]
+            self.copy.data.transform(transform)
+            self.copy.matrix_world = Matrix.Identity(4)
+            if normals:
+                self.copy.data.normals_split_custom_set(normals)
+            return self.copy
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        return False
-        with SupressBlenderOps():
-            if bpy.context.mode == "EDIT":
-                bpy.ops.object.mode_set(mode = 'OBJECT')
-            #self.copy
-            objs = bpy.data.objects
-            objs.remove(objs[self.copy.name], do_unlink=True)
-            bpy.context.scene.objects.active = None
-            self.copyObject = None
+        data = self.copy.data
+        bpy.data.objects.remove(self.copy, do_unlink=True)
+        bpy.data.meshes.remove(data)
         return False
 
 class SkeletonMap():
@@ -94,7 +90,7 @@ class SkeletonMap():
     def getBoneByIndex(self,key):
         return self.boneIndexToBone[key]
     def __bool__(self):
-        return bool(self.boneNamesToindices)
+        return bool(self.boneNamesToIndices)
     
 import re
 class BlenderExporterAPI(ModellingAPI):
@@ -108,9 +104,12 @@ class BlenderExporterAPI(ModellingAPI):
     def showMessageBox(message = "", title = "Message Box", icon = 'INFO'):
     
         def draw(self, context):
-            self.layout.label(message)
+            self.layout.label(text=message)
     
-        bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
+        if bpy.app.background:
+            print(title + ": " + message)
+        else:
+            bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
     
     @staticmethod
     def displayErrors(errors):
@@ -168,8 +167,9 @@ class BlenderExporterAPI(ModellingAPI):
     def calculateSceneBounds(writeDestination,options):
         meshes = BlenderExporterAPI.listMeshes(options)
         if meshes:
-            minBox = Vector(map(min,zip(*[mesh.bound_box[0] for mesh in meshes])))
-            maxBox = Vector(map(max,zip(*[mesh.bound_box[6] for mesh in meshes])))
+            corners = [mesh.matrix_world @ Vector(corner) for mesh in meshes for corner in mesh.bound_box]
+            minBox = Vector([min(point[i] for point in corners) for i in range(3)])
+            maxBox = Vector([max(point[i] for point in corners) for i in range(3)])
         else:
             minBox = Vector([0,0,0])
             maxBox = Vector([0,0,0])
@@ -187,7 +187,8 @@ class BlenderExporterAPI(ModellingAPI):
         rootEmpty = BlenderExporterAPI.getRootEmpty()
         root = options.validateSkeletonRoot(rootEmpty)
         protoskeleton = []
-        BlenderExporterAPI.recursiveEmptyDeconstruct(255, root, protoskeleton, skeletonMap, options.errorHandler)
+        if root is not None:
+            BlenderExporterAPI.recursiveEmptyDeconstruct(255, root, protoskeleton, skeletonMap, options.errorHandler)
         for bone in protoskeleton:
             bone["bone"]["child"] = skeletonMap[bone["bone"]["child"]] if bone["bone"]["child"] in skeletonMap else 255
         options.executeErrors()
@@ -199,7 +200,7 @@ class BlenderExporterAPI(ModellingAPI):
     @staticmethod
     def listMeshes(options):
         return sorted([o for o in bpy.context.scene.objects 
-                       if o.type=="MESH" and (options.exportHidden or not o.hide)
+                       if o.type=="MESH" and (options.exportHidden or o.visible_get())
                            and not("Type" in o.data and o.data["Type"]=="MOD3_VM_Mesh")
                            and not("Type" in o.data and o.data["Type"]=="MHW_Ctrl_Structure")
                            and len(o.data.vertices)]
@@ -244,7 +245,7 @@ class BlenderExporterAPI(ModellingAPI):
                 if name in groupToBone:
                     skeletonElement = skeletonMap[groupToBone[name]]
                     boneCoordinates = skeletonMap.getBoneByName(groupToBone[name]).matrix_world.inverted()
-                    groups[skeletonElement].append((boneCoordinates*vertex.co).freeze())
+                    groups[skeletonElement].append((boneCoordinates @ vertex.co).freeze())
         return {k:list(set(i)) for k,i in groups.items() if len(i)>0}
     
     @staticmethod
@@ -277,69 +278,63 @@ class BlenderExporterAPI(ModellingAPI):
     def getBoxBone(box,bones,options):
         constraints = [c for c in box.constraints if c.type == "CHILD_OF"]
         if len(constraints) != 1:
-            options.errorHandler.boxConstraintError(box.name)
-        else:
-            c = constraints[0]
-            bone = c.target
-            if not hasattr(bone,"boneFunction"): boneId = 255
-            else:
-                if bone.name not in bones:
-                    options.errorHandler.boxConstraintError(box.name)
-                    boneId = 255
-                else:
-                    boneId = bones[bone.name]
-        return boneId,bone
-    
-    @staticmethod
-    def getBoxClass(mesh,options,bones,boxclass):
-        boxclass = {}
-        for box in [ box for box in mesh.children 
-                    if box.type == "LATTICE" and "Type" in box.data 
-                    and box.data["Type"] == boxclass]:
-            boneIndex,bone = BlenderExporterAPI.getBoxIndex(box,bones,options)
-            if (boneIndex,bone.name) in boxclass:
-                options.errorHandler.propertyDuplicate("Bounding Box Bone %s"%(boneIndex,bone.name), boxclass, "Bone Index")
-            boxclass[(boneIndex,bone.name)] = box
-        return boxclass
-    
-    @staticmethod
-    def boxFromPair(bone,aabb,mvbb):
-        box = {}
-        s = mvbb.scale.copy()
-        mvbb.scale = [1,1,1]
-        matrix,vector = [e for v in mvbb.matrix_world.copy().transposed() for e in v], list(s.to_4d())
-        mvbb.scale = s
-        radius = vector.norm()/2
-        
-        box["boneIndex"] = bone
-        box["aabbCenter"] = list(aabb.location.to_4d())
-        box["radius"] = radius
+            raise ValueError("Bounding box needs one CHILD_OF constraint: " + box.name)
+        bone = constraints[0].target
+        if bone is None:
+            return box.get("bone_index", 255), None
+        if bone.get("Type") == "MOD3_SkeletonRoot":
+            return 255, bone
+        if bone.name not in bones:
+            raise ValueError("Bounding box target is not in exported skeleton")
+        return bones[bone.name], bone
 
-        scaling = Vector(list(abs,aabb.scale))
-        box["aabbMin"] = list((aabb.location-scaling))+[0]
-        box["aabbMax"] = list((aabb.location+scaling))+[0]
-        
-        box["oabbMatrix"] = matrix
-        box["oabbVector"] = vector
-        return box
-        
     @staticmethod
-    def getLatticeBoxes(mesh,options,boneNames):
-        mvbb = BlenderExporterAPI.getBoxClass(mesh,options,boneNames,"MOD3_BoundingBox_MVBB")
-        aabb = BlenderExporterAPI.getBoxClass(mesh,options,boneNames,"MOD3_BoundingBox_AABB")
-        boxes = []
-        for bone in mvbb:
-            if bone not in aabb:
-                options.errorHandler.missingBoxPair(bone[1],"AABB")#missing in AABB
-        for bone in sorted(aabb,key= lambda x: -1 if x[0]==255 else x[0]):
-            if bone not in mvbb:
-                options.errorHandler.missingBoxPair(bone[1],"MVBB")
-            else:
-                ix,name = bone
-                box = BlenderExporterAPI.boxFromBoxPair(ix,aabb[bone],mvbb[bone])
-                boxes.append(box)
-        return sorted(boxes,key = lambda x:  x["boneIndex"] if x["boneIndex"] != 255 else -1)
-    
+    def getBoxClass(mesh, options, bones, boxclass):
+        result = {}
+        for box in mesh.children:
+            if box.type != "LATTICE" or box.data.get("Type") != boxclass:
+                continue
+            boneIndex, bone = BlenderExporterAPI.getBoxBone(box, bones, options)
+            if boneIndex in result:
+                raise ValueError("Duplicate explicit bounding box bone index")
+            result[boneIndex] = box
+        return result
+
+    @staticmethod
+    def boxFromPair(bone, aabb, mvbb):
+        # Import creates 2x2x2 lattices with coordinates [-.5, .5].
+        corners = [aabb.matrix_world @ Vector(point.co_deform) for point in aabb.data.points]
+        minimum, maximum, center = BlenderExporterAPI.calculateAABB(corners)
+        matrix = mvbb.matrix_world.copy()
+        # Boxes are expressed in the target bone's local coordinate system.
+        constraints = [c for c in mvbb.constraints if c.type == 'CHILD_OF']
+        if constraints and constraints[0].target is not None:
+            inverse = constraints[0].target.matrix_world.inverted()
+            matrix = inverse @ matrix
+            corners = [inverse @ v for v in corners]
+            minimum, maximum, center = BlenderExporterAPI.calculateAABB(corners)
+        location, rotation, scale = matrix.decompose()
+        extent = Vector([abs(value)/2 for value in scale])
+        unscaled = rotation.to_matrix().to_4x4()
+        unscaled.translation = location
+        metadata = mvbb.get("mod3_metadata", {})
+        minimum[3] = metadata.get("aabbMin", [0]*4)[3]
+        maximum[3] = metadata.get("aabbMax", [0]*4)[3]
+        return {"boneIndex": bone, "aabbCenter": list(center), "radius": metadata.get("radius", extent.length),
+                "aabbMin": minimum, "aabbMax": maximum,
+                "spacer": list(metadata.get("spacer", [0xCD]*12)),
+                "oabbMatrix": [v for col in unscaled.transposed() for v in col],
+                "oabbVector": list(extent)+[metadata.get("oabbVector", [0]*4)[3]]}
+
+    @staticmethod
+    def getLatticeBoxes(mesh, options, boneNames):
+        mvbb = BlenderExporterAPI.getBoxClass(mesh, options, boneNames, "MOD3_BoundingBox_MVBB")
+        aabb = BlenderExporterAPI.getBoxClass(mesh, options, boneNames, "MOD3_BoundingBox_AABB")
+        if set(mvbb) != set(aabb):
+            raise ValueError("Missing AABB/MVBB pair")
+        return [BlenderExporterAPI.boxFromPair(bone, aabb[bone], mvbb[bone])
+                for bone in sorted(aabb, key=lambda value: -1 if value == 255 else value)]
+
     @staticmethod
     def getRootEmpty():
         childless = []
@@ -359,7 +354,7 @@ class BlenderExporterAPI(ModellingAPI):
             return 0
         if "Type" in rootCandidate:
             if rootCandidate["Type"] == "MOD3_SkeletonRoot":
-                if rootCandidate.hide:
+                if rootCandidate.hide_get():
                     return 3
                 return 4
             else:
@@ -376,6 +371,10 @@ class BlenderExporterAPI(ModellingAPI):
         if errorPropertyName is None: errorPropertyName = accessPropertyName
         if accessPropertyName in source:
             prop = source[accessPropertyName]
+            if hasattr(prop, "to_list"):
+                prop = prop.to_list()
+            elif hasattr(prop, "to_dict"):
+                prop = prop.to_dict()
         else:
             prop = errorHandler.propertyMissing(errorPropertyName)
         if accessPropertyName in storage:
@@ -408,8 +407,12 @@ class BlenderExporterAPI(ModellingAPI):
             BlenderExporterAPI.verifyBone(bone,errorHandler)
             #Check Child Constraint
             bone["child"] = BlenderExporterAPI.getTarget(child, errorHandler)
+            if "boneFunction" not in child:
+                raise ValueError("Non-bone child inside MOD3 skeleton: " + child.name)
             LMatrix= child.matrix_local.copy()
-            AMatrix= LMatrix.inverted()*(storage[pix]["AMatrix"] if len(storage) and pix != 255  else Matrix.Identity(4))
+            if pix == 255:
+                LMatrix = current.matrix_world @ LMatrix
+            AMatrix= LMatrix.inverted() @ (storage[pix]["AMatrix"] if len(storage) and pix != 255  else Matrix.Identity(4))
             bone["x"], bone["y"], bone["z"] = (LMatrix[i][3] for i in range(3))
             bone["parentId"] = pix
             bone["length"]=math.sqrt(bone["x"]**2 +bone["y"]**2+ bone["z"]**2)
@@ -427,12 +430,14 @@ class BlenderExporterAPI(ModellingAPI):
         options.errorHandler.setMeshName(basemesh.name)
         with MeshClone(basemesh) as mesh:
             meshProp = {}
-            if options.setHighestLoD:
-                mesh.data["lod"] = 0xFFFF
             for prop in ["shadowCast","visibleCondition","lod","weightDynamics","unkn3",
                          "blockLabel", "mapData", "intUnknown", "unknownIndex",
                         "material"]:
                 BlenderExporterAPI.verifyLoad(mesh.data, prop, options.errorHandler, meshProp)
+            if options.setHighestLoD:
+                meshProp["lod"] = 0xFFFF
+            if len({face.material_index for face in mesh.data.polygons}) > 1:
+                raise ValueError("Split multiple polygon materials into separate meshes before export")
             meshProp["blocktype"] = BlenderExporterAPI.invertBlockLabel(meshProp["blockLabel"], options.errorHandler)
             groupName = lambda x: mesh.vertex_groups[x].name            
             loopNormals, loopTangents = BlenderExporterAPI.loopValues(mesh.data, options.splitNormals, options.errorHandler)
@@ -443,7 +448,7 @@ class BlenderExporterAPI(ModellingAPI):
                 options.errorHandler.vertexCountOverflow()
             for vertex in mesh.data.vertices:
                 vert = {}
-                vert["position"] = vertex.co
+                vert["position"] = vertex.co.copy()
                 vert["weights"] = BlenderExporterAPI.weightHandling(vertex.groups, skeletonMap, groupName, options.errorHandler)
                 #Normal Handling
                 options.errorHandler.verifyLoadLoop("normal", vert, vertex, loopNormals, mesh)#vert["normal"] = loopNormals[vertex.index]
@@ -467,12 +472,13 @@ class BlenderExporterAPI(ModellingAPI):
                     faces.append({v:vert for v,vert in zip(["v1","v2","v3"],face.vertices)})
             if len(faces)>4294967295:
                 options.errorHandler.faceCountOverflow()
+            meshProp["materialIndexHint"] = basemesh.data.get("materialIndexHint", -1)
             meshProp["materialIdx"] = options.updateMaterials(meshProp,materials) 
             if options.calculateBoundingBox:
                 boundingboxes = BlenderExporterAPI.calculateBoundingBoxes(mesh,options,skeletonMap)
             else:
-                boundingboxes = BlenderExporterAPI.getLatticeBoxes(mesh,options,skeletonMap)
-        return {"mesh":pymesh, "faces":faces, "properties":meshProp, "meshname":mesh.name,
+                boundingboxes = BlenderExporterAPI.getLatticeBoxes(basemesh,options,skeletonMap)
+        return {"mesh":pymesh, "faces":faces, "properties":meshProp, "meshname":basemesh.name,
                 "boundingBoxes":boundingboxes}
     
     @staticmethod
@@ -484,22 +490,21 @@ class BlenderExporterAPI(ModellingAPI):
     
     @staticmethod
     def loopValues(mesh, useSplit, errorHandler):
-        if not useSplit or not mesh.use_auto_smooth:
-            mesh.use_auto_smooth = True
+        if not useSplit:
             mesh.normals_split_custom_set_from_vertices([vert.normal for vert in mesh.vertices])
-        try:
-            mesh.calc_tangents()
-        except:
-            pass
+        if not mesh.uv_layers:
+            raise ValueError("A UV map is required to compute MOD3 tangents")
+        mesh.calc_tangents(uvmap=mesh.uv_layers[0].name)
         normals = {}
         tangents = {}
         for loop in mesh.loops:
-            vNormal = denormalize(loop.normal)
+            vNormal = denormalize(mesh.corner_normals[loop.index].vector)
             vTangent = list(map(round, loop.tangent*127)) + [int(loop.bitangent_sign)*127]
             if loop.vertex_index in normals and \
                 any([not (-1<=(c0-c1)<=1) for c0,c1 in zip(normals[loop.vertex_index],vNormal) ]):
-                bpy.context.scene.cursor_location = mesh.vertices[loop.vertex_index].co
-                errorHandler.duplicateNormal(loop.vertex_index, vNormal, vTangent, normals)
+                raise ValueError("Conflicting corner normals at vertex %d; split seams before export" % loop.vertex_index)
+            elif loop.vertex_index in tangents and tangents[loop.vertex_index] != vTangent:
+                raise ValueError("Conflicting corner tangents at vertex %d; split seams before export" % loop.vertex_index)
             else:
                 normals[loop.vertex_index] = vNormal
                 tangents[loop.vertex_index] = vTangent
@@ -513,7 +518,7 @@ class BlenderExporterAPI(ModellingAPI):
             for loop,loopUV in zip(mesh.loops, layer.data): #.uv
                 uvPoint = (loopUV.uv[0],1-loopUV.uv[1])
                 if loop.vertex_index in uvMap and uvMap[loop.vertex_index] != uvPoint:
-                    errorHandler.duplicateUV(loop, loopUV.uv, uvMap)
+                    raise ValueError("Conflicting corner UVs; split seams before export")
                 else:
                     uvMap[loop.vertex_index] = uvPoint
             uvList.append(uvMap)
@@ -521,29 +526,36 @@ class BlenderExporterAPI(ModellingAPI):
     
     @staticmethod
     def colourValues(mesh, errorHandler):
-        if len(mesh.data.vertex_colors)==0:
+        layers = list(mesh.data.color_attributes)
+        if not layers:
             return None
-        if len(mesh.data.vertex_colors)>1:
-            colorLayer = errorHandler.excessColorLayers(mesh.data.vertex_colors)
-        else:
-            colorLayer = mesh.data.vertex_colors[0].data
+        if len(layers) > 1:
+            raise ValueError("Only one MOD3 color attribute is supported")
+        layer = layers[0]
+        if layer.domain not in {'POINT', 'CORNER'}:
+            raise ValueError("Unsupported color attribute domain")
         vertColor = {}
-        for loop, colorLoop in zip(mesh.data.loops, colorLayer):
-            color = list(map(lambda x: int(x*255),colorLoop.color))
-            if len(color)<4:color+=[255]
-            vertIndex = loop.vertex_index
-            if vertIndex in vertColor and color != vertColor[vertIndex]:
-                errorHandler.duplicateColor(vertIndex, Vector(color), vertColor)
-            else:
-                vertColor[vertIndex]=color
+        for loop in mesh.data.loops:
+            entry = layer.data[loop.vertex_index if layer.domain == 'POINT' else loop.index]
+            values = entry.color_srgb
+            if not all(math.isfinite(value) for value in values):
+                raise ValueError("Non-finite vertex color")
+            color = [round(max(0, min(1, value))*255) for value in values]
+            if loop.vertex_index in vertColor and color != vertColor[loop.vertex_index]:
+                raise ValueError("Conflicting corner colors; split seams before export")
+            vertColor[loop.vertex_index] = color
         return vertColor
-    
+
 
     @staticmethod    
     def weightHandling(weightGroups, skeletonMap, groupNameFunction, errorHandler):
         parsedGroups = [(groupNameFunction(group.group), group.weight) for group in weightGroups if errorHandler.testGroupFunction(groupNameFunction,group.group) ]
         validGroupName = lambda w: BlenderExporterAPI.validGroupName(w, skeletonMap, errorHandler)
-        weights = BufferedWeights([BufferedWeight(weightName,skeletonMap,weightVal) for weightName, weightVal in parsedGroups if validGroupName(weightName) and not math.isnan(weightVal)],errorHandler)
+        if any(not math.isfinite(value) for _, value in parsedGroups):
+            raise ValueError("Non-finite vertex weight")
+        weights = BufferedWeights([BufferedWeight(weightName,skeletonMap,weightVal) for weightName, weightVal in parsedGroups if validGroupName(weightName) and math.isfinite(weightVal)],errorHandler)
+        if len(weights) > 8:
+            raise ValueError("More than eight vertex weights cannot be represented")
         return weights
         #Handle Cases    
         #            preliminaryGroups = [(groupName(group.group),group.weight) for group in vertex.groups if BlenderExporterAPI.validGroupName(groupName(group.group), skeletonMap, options.errorHandler)]
@@ -563,5 +575,4 @@ class BlenderExporterAPI(ModellingAPI):
         if match and match.group(1)+match.group(2) in skeletonNames:
             return match.group(1)+match.group(2)
         else:
-            errorHandler.invalidGroupName(match.group(1)+match.group(2) if match else weightName)
-            return None
+            raise ValueError("Vertex group is not associated with an exported bone: " + weightName)

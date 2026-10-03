@@ -6,6 +6,7 @@ Created on Thu Mar 28 22:15:37 2019
 """
 
 from collections import Counter, OrderedDict
+from copy import deepcopy
 
 class UnhandledErrors(Exception):
     pass
@@ -15,6 +16,7 @@ class UnexportableError(Exception):
 
 class ErrorHandler():
     def __init__(self, api, propertyLevels, coerce):
+        self.propertyDefaults = deepcopy(type(self).propertyDefaults)
         self.MessageList = None
         self.PermanentRecord = OrderedDict()
         self.meshname = None
@@ -33,7 +35,7 @@ class ErrorHandler():
         message = ""
         for section, errors in self.PermanentRecord.items():
             if errors:
-                message+='\n'+separator+section+'\n'+separator+'\n'.join(errors)+'\n'
+                message+='\n'+separator+section+'\n'+separator+'\n'.join(str(error) for error in errors)+'\n'
         self.api.displayErrors(message)
         return        
         
@@ -138,7 +140,7 @@ class ErrorHandler():
             if self.section == "Meshes":
                 message = (self.meshname,message)
             self.MessageList.append(message)
-        return self.propertyDefaults[propertyName]
+        return deepcopy(self.propertyDefaults[propertyName])
     
     defaultLoops = {"normal":(0.0,0.0,0.0),
                     "tangent":(0,0,0,127),
@@ -151,10 +153,7 @@ class ErrorHandler():
     
     def verifyLoadLoop(self, field, customVert, blenderVert, loopArray, mesh):
         if blenderVert.index not in loopArray:
-            self.__setattr__(self.loopLevel,True)
-            if self.loopLevel != "Ignore":
-                self.MessageList.append((self.meshname,"%s: Missing %s at vertex implies orphan vertex or no UV to generate normals."%(self.loopLevel, field)))
-            customVert[field]=self.defaultLoops[field]
+            raise ValueError("Orphan vertex has no corner " + field)
         else:
             customVert[field] = loopArray[blenderVert.index]
     

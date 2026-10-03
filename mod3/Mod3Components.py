@@ -108,9 +108,8 @@ class Mod3Materials(CS.Mod3Container):
         return self.mod3Array[ix].materialName
         
     def sceneProperties(self):
-        uniqueMaterials = {"MaterialName%d"%ix:matname for ix, matname in enumerate(sorted(set(m.materialName for m in self.mod3Array)))}
-        return {"materialCount":len(uniqueMaterials),
-                **uniqueMaterials}
+        return {"materialCount": self.Count(),
+                **{"MaterialName%d" % index: mat.materialName for index, mat in enumerate(self.mod3Array)}}
 
 class Mod3GroupProperty(CS.PyCStruct):
     fields = OrderedDict([

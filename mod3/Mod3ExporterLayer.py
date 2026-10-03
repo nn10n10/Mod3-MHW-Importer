@@ -5,6 +5,9 @@ Created on Thu Mar 14 00:15:18 2019
 @author: AsteriskAmpersand
 """
 
+import os
+import tempfile
+
 try:
     from ..mod3 import Mod3
     from ..mod3 import Mod3VertexBuffers as Mod3Vert
@@ -31,7 +34,7 @@ class ExporterSettings():
         self.setHighestLoD = options["lod"]
         self.splitNormals = options["splitnormals"]
         self.exportHidden = options["hidden"]
-        self.calculateBoundingBox = options["boundingbox"]
+        self.calculateBoundingBox = options["boundingbox"] == "Calculate"
         
     def validateMaterials(self, materials):
         if self.materialsAdded and not materials:
@@ -46,7 +49,9 @@ class ExporterSettings():
             idx = 0
         else:
             try:
-                idx = materialList.index(meshprops["material"].ljust(128,'\x00'))
+                hint = meshprops.get("materialIndexHint", -1)
+                name = meshprops["material"].ljust(128, '\x00')
+                idx = hint if 0 <= hint < len(materialList) and materialList[hint] == name else materialList.index(name)
             except:
                 idx = len(materialList)
                 materialList.append(meshprops["material"].ljust(128,'\x00'))
@@ -61,7 +66,7 @@ class ExporterSettings():
         if len(rootEmpty)>1:
             self.errorHandler.skeletonRootError("Multiple")
         if not rootEmpty:
-            self.errorHandler.skeletonRootError("No")
+            return None
         return rootEmpty[0]
            
     def executeErrors(self):
@@ -83,12 +88,19 @@ class ModelToMod3():
             self.options.errorHandler.displayErrors()
         except UnexportableError as e:
             self.api.showMessageBox("Export Process failed due to an Error. Check the cause in Window > Toggle_System_Console")
-            return
+            raise
         self.model.construct(fileHeader, materials, groupStuff, skeleton, lmatrices, amatrices, meshparts, trailingData)
-        file = open(context,"wb")
-        file.write(self.model.serialize())
-        file.close()
-        
+        binary = self.model.serialize()
+        destination = os.path.abspath(context)
+        descriptor, temporary = tempfile.mkstemp(prefix=".mod3-", dir=os.path.dirname(destination))
+        try:
+            with os.fdopen(descriptor, "wb") as file:
+                file.write(binary)
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
     def analyzeMeshparts(self, meshparts):
         for meshpart in meshparts:
             self.options.errorHandler.setMeshName(meshpart["meshname"])

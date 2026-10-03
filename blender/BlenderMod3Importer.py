@@ -577,6 +577,7 @@ class BlenderImporterAPI(ModellingAPI):
             lattice_ob["bone_index"] = box.bone()
         constraint.target = armature[box.bone()] if box.bone() in armature else None
         lattice["Type"] = "MOD3_BoundingBox_MVBB"
+        lattice_ob["mod3_metadata"] = box.metadata()
         bpy.context.collection.objects.link(lattice_ob)
         bpy.context.view_layer.update()
         return lattice_ob

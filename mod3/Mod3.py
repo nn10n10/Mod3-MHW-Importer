@@ -173,7 +173,7 @@ class Mod3():
         meshes = []
         for traditionalMesh in self.MeshParts.traditionalMeshStructure(weightSplit):
             traditionalMesh["properties"]["material"] = self.Materials[traditionalMesh["properties"]["materialIdx"]]
-            traditionalMesh["properties"].pop("materialIdx")
+            traditionalMesh["properties"]["materialIndexHint"] = traditionalMesh["properties"].pop("materialIdx")
             traditionalMesh["properties"]["blockLabel"] = Mod3Vertex.blocklist[traditionalMesh["properties"]["blocktype"]]["name"]
             traditionalMesh["properties"].pop("blocktype")
             meshes.append(traditionalMesh)

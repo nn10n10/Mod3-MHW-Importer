@@ -1,5 +1,5 @@
 """Synthetic format fixtures only; no game assets are distributed."""
-import sys, types, copy
+import sys, types, copy, math
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 pkg=types.ModuleType("mod3_fixture_pkg");pkg.__path__=[str(root)];sys.modules[pkg.__name__]=pkg
@@ -11,7 +11,7 @@ from mod3_fixture_pkg.common.FileLike import FileLike
 def fixture(blocktype=0xf637401c):
     defaults=copy.deepcopy(ErrorHandler.propertyDefaults)
     header={"vertexIds":12,"groupCount":0,"materialCount":1,"creationDate":123,
-            "boundingData":{"center":[.5,.5,0],"radius":1,"minBox":[0,0,0,0],"maxBox":[1,1,0,0]},
+            "boundingData":{"center":[.5,.5,0],"radius":math.sqrt(.5),"minBox":[0,0,0,0],"maxBox":[1,1,0,0]},
             "floatData":{k.split(':')[1]:v for k,v in defaults.items() if k.startswith('FloatSegment:')},
             "byteData":{"unkn1":[0]*64}}
     skeleton=[{"boneFunction":i,"parentId":255 if i==0 else i-1,"child":255,"unkn2":0,"length":0,"x":0,"y":0,"z":0} for i in range(8)]
