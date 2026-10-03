@@ -14,15 +14,14 @@ def setLocation(node,location):
 def createTexNode(nodeTree,color,texture,name):
     baseType = "ShaderNodeTexImage"
     node = nodeTree.nodes.new(type=baseType)
-    node.color_space = color
-    node.image = texture
+    node.image = texture.copy() if texture.users else texture
+    node.image.colorspace_settings.name = "sRGB" if color == "COLOR" else "Non-Color"
     node.name = name
     return node
 
 def materialSetup(filename,blenderObj,*args):
     matName = blenderObj.data["material"].replace("\x00","") if "material" in blenderObj.data else "RenderMaterial"
     matName = filename + "_" + matName
-    bpy.context.scene.render.engine = 'CYCLES'
     if matName in bpy.data.materials:
         blenderObj.data.materials.append(bpy.data.materials[matName])
         return None
@@ -45,7 +44,7 @@ def principledSetup(nodeTree):
         setLocation(transparentNode,(6,7))
         alphaMixerNode = nodeTree.nodes.new(type="ShaderNodeMixShader")
         setLocation(alphaMixerNode,(10,1))
-        nodeTree.links.new(diffuseNode.outputs[0],bsdfNode.inputs[0])
+        nodeTree.links.new(diffuseNode.outputs[0],bsdfNode.inputs["Base Color"])
         nodeTree.links.new(diffuseNode.outputs[1],alphaMixerNode.inputs[0])
         nodeTree.links.new(transparentNode.outputs[0],alphaMixerNode.inputs[1])
         
@@ -57,12 +56,12 @@ def principledSetup(nodeTree):
         nodeTree.links.new(normalNode.outputs[0],bsdfNode.inputs["Normal"])
     specularNode = yield
     if specularNode:
-        nodeTree.links.new(specularNode.outputs[0],bsdfNode.inputs[5])
+        nodeTree.links.new(specularNode.outputs[0],bsdfNode.inputs["Specular IOR Level"])
     rmtTern = yield
     if rmtTern:
         splitter,subsurface = rmtTern
-        nodeTree.links.new(splitter.outputs[0],bsdfNode.inputs[7])
-        nodeTree.links.new(splitter.outputs[1],bsdfNode.inputs[4])
+        nodeTree.links.new(splitter.outputs["Red"],bsdfNode.inputs["Roughness"])
+        nodeTree.links.new(splitter.outputs["Green"],bsdfNode.inputs["Metallic"])
         translucencyNode = nodeTree.nodes.new(type="ShaderNodeBsdfTranslucent")
         setLocation(translucencyNode,(6,6))
         
@@ -86,12 +85,12 @@ def principledSetup(nodeTree):
         if normalNode: nodeTree.links.new(normalNode.outputs[0],translucencyNode.inputs[1])#normal        
         
         
-        nodeTree.links.new(splitter.outputs[2],translucentMixerNode.inputs[0])
+        nodeTree.links.new(splitter.outputs["Blue"],translucentMixerNode.inputs[0])
         nodeTree.links.new(endNode.outputs[0],translucentMixerNode.inputs[1])
         nodeTree.links.new(activeNode.outputs[0],translucentMixerNode.inputs[2])
                 
-        nodeTree.links.new(subsurface.outputs[1],bsdfNode.inputs[1])
-        if diffuseNode: nodeTree.links.new(diffuseNode.outputs[0],bsdfNode.inputs[3])
+        nodeTree.links.new(subsurface.outputs[1],bsdfNode.inputs["Subsurface Weight"])
+        # Modern Principled uses Base Color for subsurface color as well.
         endNode = translucentMixerNode
         
     emissiveNode = yield
@@ -112,7 +111,7 @@ def diffuseSetup(nodeTree,texture,*args):
     #bsdfNode = nodeTree.nodes.new(type="ShaderNodeBsdfDiffuse")
     #bsdfNode.name = "Diffuse BSDF"          
     #Plug Diffuse Texture to BDSF (color -> color)
-    #nodeTree.links.new(diffuseNode.outputs[0],bsdfNode.inputs[0])
+    #nodeTree.links.new(diffuseNode.outputs[0],bsdfNode.inputs["Base Color"])
     return diffuseNode
 
 def normalSetup(nodeTree,texture,*args):
@@ -120,37 +119,40 @@ def normalSetup(nodeTree,texture,*args):
     normalNode = createTexNode(nodeTree,"NONE",texture,"Normal Texture")
     setLocation(normalNode,(0,6))
     #Create SplitNode
-    splitNode = nodeTree.nodes.new(type="ShaderNodeSeparateRGB")
+    splitNode = nodeTree.nodes.new(type="ShaderNodeSeparateColor")
+    splitNode.mode = "RGB"
     splitNode.name = "Normal Split"
     setLocation(splitNode,(2,6))
     #Create Recombine
-    joinNode = nodeTree.nodes.new(type="ShaderNodeCombineRGB")
+    joinNode = nodeTree.nodes.new(type="ShaderNodeCombineColor")
+    joinNode.mode = "RGB"
     joinNode.name = "Normal Combine"
-    joinNode.inputs[2].default_value = 1.0
+    joinNode.inputs["Blue"].default_value = 1.0
     setLocation(joinNode,(3,8))
     #Create NormalMapNode
     normalmapNode = nodeTree.nodes.new(type="ShaderNodeNormalMap")
     normalmapNode.name = "Normal Map"
     setLocation(normalmapNode,(4,6))
     #Plug Normal Data to Node (color -> color)
-    nodeTree.links.new(normalNode.outputs[0],splitNode.inputs[0])
+    nodeTree.links.new(normalNode.outputs[0],splitNode.inputs["Color"])
     
-    nodeTree.links.new(splitNode.outputs[0],joinNode.inputs[0])
-    nodeTree.links.new(splitNode.outputs[1],joinNode.inputs[1])
+    nodeTree.links.new(splitNode.outputs["Red"],joinNode.inputs["Red"])
+    nodeTree.links.new(splitNode.outputs["Green"],joinNode.inputs["Green"])
     
-    nodeTree.links.new(joinNode.outputs[0],normalmapNode.inputs[1])
+    nodeTree.links.new(joinNode.outputs["Color"],normalmapNode.inputs["Color"])
     return normalmapNode
     
 def specularSetup(nodeTree,texture,*args):
     #Create SpecularityMaterial
     specularNode = createTexNode(nodeTree,"NONE",texture,"Specular Texture")
     #Create RGB Curves
-    splitterNode = nodeTree.nodes.new(type="ShaderNodeSeparateRGB")
+    splitterNode = nodeTree.nodes.new(type="ShaderNodeSeparateColor")
+    splitterNode.mode = "RGB"
     splitterNode.name = "FX Splitter"
     #setLocation(splitterNode,(2,1))
     
     #Plug Specularity Color to RGB Curves (color -> color)
-    nodeTree.links.new(specularNode.outputs[0],splitterNode.inputs[0])
+    nodeTree.links.new(specularNode.outputs[0],splitterNode.inputs["Color"])
     splitterNode = None #Comment out to renable
     return splitterNode
     
@@ -177,11 +179,12 @@ def rmtSetup(nodeTree,texture,*args):
     rmtNode = createTexNode(nodeTree,"NONE",texture,"RMT Texture")
     setLocation(rmtNode,(0,3))
     #Create Separate RGB
-    splitterNode = nodeTree.nodes.new(type="ShaderNodeSeparateRGB")
+    splitterNode = nodeTree.nodes.new(type="ShaderNodeSeparateColor")
+    splitterNode.mode = "RGB"
     splitterNode.name = "RMT Splitter"
     setLocation(splitterNode,(2,1))
     #Tex To Splitter
-    nodeTree.links.new(rmtNode.outputs[0],splitterNode.inputs[0])
+    nodeTree.links.new(rmtNode.outputs[0],splitterNode.inputs["Color"])
     return splitterNode,rmtNode
 
 def furSetup(nodeTree,texture,*args):
@@ -189,9 +192,10 @@ def furSetup(nodeTree,texture,*args):
     #Create FMMap
     fmNode = createTexNode(nodeTree,"COLOR",texture,"FM Texture")
     #Separate RGB
-    splitterNode = nodeTree.nodes.new(type="ShaderNodeSeparateRGB")
+    splitterNode = nodeTree.nodes.new(type="ShaderNodeSeparateColor")
+    splitterNode.mode = "RGB"
     splitterNode.name = "FM Splitter"
-    nodeTree.links.new(fmNode.outputs[0],splitterNode.inputs[0])
+    nodeTree.links.new(fmNode.outputs[0],splitterNode.inputs["Color"])
     #Create Input
     inputNode = nodeTree.nodes.new(type="NodeReroute")
     inputNode.name = "Reroute Node"
