@@ -10,4 +10,4 @@
 - Strict MRL3 lookups; visible converter failures, argv paths and bounded execution.
 - Runnable binary tests and real Blender operator regression suite.
 
-Verified on Blender 4.4.3; Blender 5.2 is a static-audit target, not verified support. Five supplied real MOD3 models fail bbox consistency interpretation, blocking release. Converter binaries and game behavior remain untested. See docs/FIX_STATUS.md and docs/VALIDATION.md. No license grant is added.
+API/safety and synthetic coverage ran on Blender 4.4.3 and 5.2.2 LTS. Five supplied real MOD3 models fail the per-mesh bbox association assumption; old 4.4.3 imports geometry while upstream silently assigns only available boxes. The physical table fits its section exactly; ownership semantics remain unresolved and block release. Converter binaries and game behavior remain untested. See docs/FIX_STATUS.md and docs/VALIDATION.md. No license grant is added.

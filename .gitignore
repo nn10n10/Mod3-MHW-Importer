@@ -31,3 +31,5 @@ __pycache__
 # Operating System Files
 # =========================
 dbg.txt
+testdata/private/
+samples/private/

@@ -11,9 +11,9 @@
 | Export safety | Blender 4.4.3 | Failure preserves output; source transforms/data unchanged; UV conflicts and MOD3 Armature rejected |
 | Shader nodes | Blender 4.4.3 | Named channels/sockets and image color spaces passed |
 | Real Blender operator round-trip | Blender 4.4.3 | 16 synthetic complete files passed, including four/eight-weight high flags |
-| User MOD3 import/round-trip | Blender 4.4.3 | 5 rejected before mesh creation; round-trip did not complete |
-| User MRL3 parser | Python 3.13 | 3 passed, each 5 materials / 12 textures |
-| Blender 5.2 runtime | Not installed | NOT TESTED |
+| User MOD3 import/round-trip | Blender 4.4.3 and 5.2.2 | Current branch rejects all five before mesh creation; old 4.4.3 plugin imports geometry; no round-trip completed |
+| User MRL3 parser | Python 3.13 and Blender 5.2.2 Python 3.13.13 | 3 passed, each 5 materials / 12 textures |
+| Blender 5.2 runtime | Blender 5.2.2 LTS / Python 3.13.13 | Registration, API/safety/material and synthetic tests PASS; five real MOD3 files fail at bbox association |
 | EXE texture conversion | Not executed | NOT TESTED |
 | In-game use / complex edited production scene | Not available | NOT TESTED |
 
@@ -33,6 +33,13 @@ The suite correctly exits nonzero for these failures. A bbox mismatch under the 
 
 Full logs and JSON are under the workspace sibling `audit-artifacts/` (excluded from repository and distribution); assets remain at the user's supplied directory. No game files are committed or downloaded.
 
-## Static Blender 5.2 checks
+## Blender 5.2 static and runtime checks
 
-Official source: [Principled declarations](https://github.com/blender/blender/blob/blender-v5.2-release/source/blender/nodes/shader/nodes/node_shader_bsdf_principled.cc), [Color nodes](https://github.com/blender/blender/blob/blender-v5.2-release/source/blender/nodes/shader/nodes/node_shader_sepcomb_color.cc), [mesh RNA](https://github.com/blender/blender/blob/blender-v5.2-release/source/blender/makesrna/intern/rna_mesh.cc), [dependency versions](https://github.com/blender/blender/blob/blender-v5.2-release/build_files/build_environment/cmake/versions.cmake). Named Principled inputs and Color RGB channels were checked; bundled Python version is 3.13.13 in that release branch. These are static checks, not a whole-plugin 5.2 execution certificate.
+Official source: [Principled declarations](https://github.com/blender/blender/blob/blender-v5.2-release/source/blender/nodes/shader/nodes/node_shader_bsdf_principled.cc), [Color nodes](https://github.com/blender/blender/blob/blender-v5.2-release/source/blender/nodes/shader/nodes/node_shader_sepcomb_color.cc), [mesh RNA](https://github.com/blender/blender/blob/blender-v5.2-release/source/blender/makesrna/intern/rna_mesh.cc), [dependency versions](https://github.com/blender/blender/blob/blender-v5.2-release/build_files/build_environment/cmake/versions.cmake). Named Principled inputs and Color RGB channels were checked; bundled Python version is 3.13.13 in that release branch. Blender 5.2.2 is now installed and the documented headless test suites ran successfully on synthetic data. They are not a real-model 5.2 pass: the five user MOD3 files are still rejected at the unresolved bbox association check. See [second-stage evidence](SECOND_STAGE_BBOX_AND_BLENDER52.md).
+
+
+## Blender 5.2.2 update
+
+Blender 5.2.2 LTS / Python 3.13.13 runtime registration, Import/Export operators, five API/safety/material scripts, 13 binary/MRL tests and all 16 synthetic round-trips passed. Three user MRL3 parsed (5 materials, 12 textures each). The five user MOD3 samples still fail the new per-mesh bbox count invariant; the old 4.4.3 add-on imported their geometry and stored the 144-byte records as opaque `MeshProperty` scene keys. Upstream's parser silently assigns only available records when counts mismatch. See [the three-way comparison and exact offsets](SECOND_STAGE_BBOX_AND_BLENDER52.md).
+
+The material test reports a Blender 5.2 deprecation warning for `Material.use_nodes`; it remains functional in 5.2 but is expected to be removed in Blender 6.0. Texture conversion and game behavior remain untested.
