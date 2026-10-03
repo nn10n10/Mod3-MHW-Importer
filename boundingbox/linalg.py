@@ -37,15 +37,16 @@ def getCovariance(points):
     return np.cov(np.matrix(points).transpose())
 
 def getEigenvectors(matrix):
-    lambdas, V =  np.linalg.eig(matrix)
-    return [v for l,v in sorted(zip(lambdas,V),key = lambda x: x[0]) if l != 0]  
+    lambdas, vectors = np.linalg.eigh(matrix)
+    return [Vector(vectors[:, i]) for i in np.argsort(lambdas) if lambdas[i] > 1e-12]
+
 
 def completeBasis(n):
-    if n[2] == 0: 
-        u = Vector((0,0,1))
-    else: 
-        u = Vector((1,0,n[0]/n[2])).normalized()
-    return u
+    n = Vector(n).normalized()
+    if not n.length:
+        raise ValueError("Cannot complete a zero direction")
+    axis = Vector((1, 0, 0)) if abs(n.x) < 0.9 else Vector((0, 1, 0))
+    return n.cross(axis).normalized()
 
 def getLinearVector(points):
     r = points[0]
@@ -54,7 +55,7 @@ def getLinearVector(points):
         p = points[p0+1]
         if p != r:
             vec = r-p
-            if vec.length != 0:
+            if vec.length == 0:
                 vec = None
             else:
                 break
@@ -98,7 +99,7 @@ def getDimension(points):
                     dim = 2
                     for p2 in range(p1+1,n):
                          vec3 = points[p2]-r
-                         if Matrix(list(zip(vec,vec2,vec3))).determinant:
+                         if abs(Matrix(list(zip(vec,vec2,vec3))).determinant()) > 1e-10:
                              dim = 3
                              break
                     break

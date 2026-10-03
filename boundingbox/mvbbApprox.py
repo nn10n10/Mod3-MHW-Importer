@@ -129,10 +129,10 @@ def approximateDiameter(points,eps):
 
 def inputTransform(points,u,v,w):
     basisChange = Matrix(list(zip(u,v,w))).inverted()
-    bb = BoundingBox(list(map(lambda x: basisChange*Vector(x),points)))
-    trans = Matrix(list(zip(u,v,w)))*bb.to_trans()
+    bb = BoundingBox(list(map(lambda x: basisChange @ Vector(x),points)))
+    trans = Matrix(list(zip(u,v,w))) @ bb.to_trans()
     rotTransMatrix = Matrix(list(zip([*u,0],[*v,0],[*w,0],trans.to_4d())))
-    return rotTransMatrix, bb.to_scale() 
+    return rotTransMatrix, bb.to_scale()/2
 
 def barequetHar(points,eps = None, caliper = False):
     if eps is None:

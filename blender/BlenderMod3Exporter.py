@@ -251,7 +251,7 @@ class BlenderExporterAPI(ModellingAPI):
     def calculateAABB(verts):
         minbox = Vector([min((v[0] for v in verts)),min((v[1] for v in verts)),min((v[2] for v in verts))])
         maxbox = Vector([max((v[0] for v in verts)),max((v[1] for v in verts)),max((v[2] for v in verts))])
-        center = (maxbox-minbox)/2
+        center = (maxbox+minbox)/2
         return list(minbox)+[0],list(maxbox)+[0],center
     
     @staticmethod

@@ -17,9 +17,11 @@ try:
         #print(len(b.verts))
         hull = bmesh.ops.convex_hull(b,input = b.verts)
         g = hull["geom"]
+        b.verts.index_update()
         verts = {obj.index:ix for ix,obj in enumerate([obj for obj in g if type(obj) is bmesh.types.BMVert])}
         edges = [(verts[obj.verts[0].index],verts[obj.verts[1].index]) for obj in g if type(obj) is bmesh.types.BMEdge]
-        verts = [obj.co for obj in g if type(obj) is bmesh.types.BMVert]
+        verts = [obj.co.copy() for obj in g if type(obj) is bmesh.types.BMVert]
+        b.free()
         return verts,edges
 except:
     from pyhull.convex_hull import ConvexHull as CH
