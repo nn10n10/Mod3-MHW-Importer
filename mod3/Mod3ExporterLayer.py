@@ -80,6 +80,10 @@ class ModelToMod3():
         self.options = ExporterSettings(Api, options)
     
     def execute(self, context):
+        binary = self.api.preservedBinary(self.options)
+        if binary is not None:
+            self.writeBinary(context, binary)
+            return
         try:
             fileHeader, groupStuff, trailingData, headerMaterials = self.api.getSceneHeaders(self.options)         
             skeleton,lmatrices,amatrices,bonenames = self.api.getSkeletalStructure(self.options)
@@ -91,6 +95,10 @@ class ModelToMod3():
             raise
         self.model.construct(fileHeader, materials, groupStuff, skeleton, lmatrices, amatrices, meshparts, trailingData)
         binary = self.model.serialize()
+        self.writeBinary(context, binary)
+
+    @staticmethod
+    def writeBinary(context, binary):
         destination = os.path.abspath(context)
         descriptor, temporary = tempfile.mkstemp(prefix=".mod3-", dir=os.path.dirname(destination))
         try:

@@ -1,5 +1,7 @@
 # 第二阶段：真实 MOD3 bbox 根因与 Blender 5.2 验证
 
+> Historical pre-implementation evidence. Current behavior/results are in [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md); real import and byte-preservation now work, with scene-normal fidelity failures recorded separately.
+
 测试 Blender：5.2.2 LTS，Python `3.13.13`；Blender 4.4 基线 `4.4.3` / Python `3.11.11`。分支代码 HEAD 在本阶段未修改。样本只读；输入哈希前后相同。
 
 ## A. 五个文件的物理布局

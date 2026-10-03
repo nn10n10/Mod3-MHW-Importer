@@ -98,7 +98,10 @@ class ImportMOD3(Operator, ImportHelper):
         BApi = Api.BlenderImporterAPI()
         options = self.parseOptions()
         blenderContext = Context(self.filepath, [], None)
-        Mod3IL.Mod3ToModel(Mod3File, BApi, options).execute(blenderContext)
+        importer = Mod3IL.Mod3ToModel(Mod3File, BApi, options)
+        importer.execute(blenderContext)
+        if importer.model.MeshParts.ownershipState == 'unresolved':
+            self.report({'WARNING'}, "BBox ownership unresolved; global data preserved. Edited scenes cannot be exported.")
         #bpy.ops.object.mode_set(mode='OBJECT')
         #bpy.context.area.type = 'INFO'
         return {'FINISHED'}

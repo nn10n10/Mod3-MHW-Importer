@@ -26,6 +26,8 @@ class CorruptModel(Exception):
 
 class Mod3ToModel():
     def __init__(self, Mod3File, Api, options):
+        self.sourceBytes = bytes(Mod3File.data)
+        self.importOptions = dict(options)
         model = Mod3.Mod3()
         try:
             model.marshall(Mod3File)
@@ -37,10 +39,24 @@ class Mod3ToModel():
         self.calls = self.parseOptions(options)
 
     def execute(self, context):
+        import bpy
+        from ..blender import BlenderOpaqueBounds
+        existing = set(bpy.context.scene.objects)
         # self.api.resetContext(context)
         for call in self.calls:
             call(context)
             # self.api.resetContext(context)
+        if self.model.MeshParts.ownershipState == 'unresolved':
+            options = self.importOptions
+            complete = (not existing.intersection(bpy.context.scene.objects)
+                        and "Mesh Parts" in options and "Only Highest LOD" not in options
+                        and options.get("Split Weights") == "Slash"
+                        and (not self.model.Header.boneCount or options.get("Skeleton") in {"EmptyTree", "Armature"})
+                        and len(context.meshes) == self.model.Header.meshCount)
+            try:
+                BlenderOpaqueBounds.capture(self.sourceBytes, context, complete)
+            except (ValueError, TypeError, RuntimeError) as exc:
+                print("MOD3: geometry imported, opaque export blocked: %s" % exc)
 
     def parseOptions(self, options):
         execute = []
@@ -73,6 +89,9 @@ class Mod3ToModel():
         self.splitWeights = {"Group": 0, "Split": 1,
                              "Slash": 2, "Signed": 3}[options["Split Weights"]]
         self.omitEmpty = "Omit Unused Groups" in options
+        if self.model.MeshParts.ownershipState == 'unresolved':
+            self.omitEmpty = False
+            print("MOD3: bbox ownership unresolved; no per-mesh assignment or bbox-based weight omission")
         return execute
 
     def loadGroupsFunctions(self, c):

@@ -90,6 +90,9 @@ class Mod3Mesh():
         self.BoundingBoxes = []
 
     def marshall(self, data):
+        position = data.tell()
+        self.rawHeader = bytes(data.read(len(self.Header)))
+        data.seek(position)
         self.Header.marshall(data)
         if self.Header.faceCount % 3:
             raise ValueError("Face index count is not divisible by three")
@@ -158,6 +161,8 @@ class Mod3Mesh():
                 raise ValueError("Face index outside mesh vertex range")
 
     def serialize(self):
+        if hasattr(self, "rawHeader") and self.Header.boundingBoxCount != self.rawHeader[41]:
+            raise ValueError("Cannot rewrite the original mesh header offset-41 byte")
         return self.Header.serialize(), \
             b''.join([vertex.serialize() for vertex in self.Vertices]), \
             b''.join([face.serialize() for face in self.Faces])
@@ -320,14 +325,14 @@ class Mod3MeshCollection():
                 mesh.marshall(data)
             except (IndexError, KeyError, ValueError) as exc:
                 raise ValueError("Invalid MOD3 mesh %d: %s" % (index, exc)) from exc
-        self.BoundingBoxes.marshall(data)
-        assigned = sum(mesh.Header.boundingBoxCount for mesh in self.Meshes)
-        if assigned != self.BoundingBoxes.count:
-            raise ValueError("Inconsistent bounding box counts: meshes reference %d, table contains %d; refusing lossy import" %
-                             (assigned, self.BoundingBoxes.count))
-        boxes = iter(self.BoundingBoxes.BoundingBoxes)
-        for mesh in self.Meshes:
-            mesh.BoundingBoxes = [next(boxes) for _ in range(mesh.Header.boundingBoxCount)]
+        self.BoundingBoxes.marshall(data, self.vertexOffset)
+        if data.tell() != self.vertexOffset:
+            raise ValueError("Bounding box table end does not match vertex section start")
+        # Even matching counts do not independently prove mesh ownership.
+        # Keep the global ordered table separate; never guess a partition.
+        self.ownershipState = "unresolved" if (self.BoundingBoxes.count or
+            any(mesh.rawHeader[41] for mesh in self.Meshes)) else "empty"
+        self.ownershipMapping = None
 
     def serialize(self):
         meshes, vertices, faces = [], [], []
@@ -498,12 +503,17 @@ class Mod3BoundingBox(CS.PyCStruct):
 class Mod3BoundingBoxes(CS.PyCStruct):
     fields = OrderedDict([("count", "uint")])
 
-    def marshall(self, data):
+    def marshall(self, data, sectionEnd=None):
         super().marshall(data)
-        if self.count * len(Mod3BoundingBox()) > len(data) - data.tell():
-            raise ValueError("Bounding box table exceeds file")
+        limit = len(data) if sectionEnd is None else sectionEnd
+        if not data.tell() <= limit <= len(data) or self.count * len(Mod3BoundingBox()) > limit - data.tell():
+            raise ValueError("Bounding box table exceeds section/file bounds")
+        position = data.tell()
+        self.rawRecords = bytes(data.read(self.count * len(Mod3BoundingBox())))
+        data.seek(position)
         self.BoundingBoxes = [Mod3BoundingBox() for _ in range(self.count)]
         [x.marshall(data) for x in self.BoundingBoxes]
+        self._decodedBaseline = b''.join(x.serialize() for x in self.BoundingBoxes)
 
     def construct(self, data):
         data = self.decompose(data)
@@ -516,6 +526,11 @@ class Mod3BoundingBoxes(CS.PyCStruct):
         return propertyMass
 
     def serialize(self):
+        if hasattr(self, "rawRecords"):
+            decoded = b''.join(prop.serialize() for prop in self.BoundingBoxes)
+            if self.count != len(self.BoundingBoxes) or decoded != self._decodedBaseline:
+                raise ValueError("Cannot rewrite an imported global bbox table with unresolved ownership")
+            return super().serialize() + self.rawRecords
         return super().serialize() + b''.join([prop.serialize() for prop in self.BoundingBoxes])
 
     def __len__(self):

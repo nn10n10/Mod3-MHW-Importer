@@ -208,6 +208,11 @@ class BlenderExporterAPI(ModellingAPI):
                            and not("Type" in o.data and o.data["Type"]=="MHW_Ctrl_Structure")
                            and len(o.data.vertices)]
                     ,key=lambda x: x.data.name)
+
+    @staticmethod
+    def preservedBinary(options):
+        from .BlenderOpaqueBounds import preserved_binary
+        return preserved_binary(options)
     
     @staticmethod
     def getMeshparts(options, boneNames, materials):

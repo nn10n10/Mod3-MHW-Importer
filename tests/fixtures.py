@@ -28,3 +28,20 @@ def fixture(blocktype=0xf637401c, weight_bits=0):
 
 def parse(data):
     model=Mod3();model.marshall(FileLike(data));return model
+
+
+def opaque_fixture(mesh_fields=(0, 60), record_count=23):
+    """Independent ownership mismatches; repeated bones and opaque spacers."""
+    model = fixture()
+    original = model.MeshParts.Meshes[0]
+    model.MeshParts.Meshes = [copy.deepcopy(original) for _ in mesh_fields]
+    box = model.MeshParts.BoundingBoxes.BoundingBoxes[0].sceneProperties()
+    box['boneIndex'] = 0
+    box['spacer'] = list(range(12))
+    model.MeshParts.BoundingBoxes.construct([copy.deepcopy(box) for _ in range(record_count)])
+    for mesh, value in zip(model.MeshParts, mesh_fields):
+        mesh.Header.boundingBoxCount = value
+        mesh.Header.NULL_1 = 12345
+    model.calculateCountsOffsets()
+    model.MeshParts.realignFaces()
+    return model.serialize()

@@ -47,6 +47,9 @@ class Mod3():
         data.seek(self.Header.trailOffset)
         self.Trailing = self.Trailing()
         self.Trailing.marshall(data)
+        if self.MeshParts.ownershipState == 'unresolved':
+            self._originalBytes = bytes(data.data)
+            self._parsedBaseline = self._serializeCurrent()
 
     def validateHeader(self, file_size):
         h = self.Header
@@ -138,6 +141,14 @@ class Mod3():
         return offset+(grid - offset%grid if offset%grid else 0)
     
     def serialize(self):
+        current = self._serializeCurrent()
+        if hasattr(self, '_parsedBaseline'):
+            if current != self._parsedBaseline:
+                raise ValueError("Cannot serialize an edited parsed MOD3 with unresolved bbox ownership")
+            return self._originalBytes
+        return current
+
+    def _serializeCurrent(self):
         serialization = b''
         serialization+=self.Header.serialize()
         serialization+=self.pad(len(serialization),self.Header.boneOffset)

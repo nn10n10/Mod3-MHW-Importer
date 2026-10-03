@@ -38,7 +38,7 @@ class BinaryTests(unittest.TestCase):
     def test_header_and_bbox_rejection(self):
         from fixtures import fixture, parse
         data=fixture().serialize(); model=parse(data)
-        for offset,value,fmt in [(0,0,'I'),(32,2**63,'Q'),(int(model.Header.meshOffset)+41,0,'B')]:
+        for offset,value,fmt in [(0,0,'I'),(32,2**63,'Q')]:
             bad=bytearray(data);struct.pack_into('<'+fmt,bad,offset,value)
             with self.assertRaises(ValueError):parse(bad)
         for limit in [0,319,model.Header.vertexOffset,model.Header.facesOffset]:
