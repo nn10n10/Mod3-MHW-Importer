@@ -1,46 +1,49 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Mar 13 00:18:07 2019
-
-@author: AsteriskAmpersand
-"""
-import sys
+"""Optional Windows texture converters. Fail visibly; never invoke a shell."""
 import os
 import subprocess
+from pathlib import Path
 
-if sys.platform.startswith("win"):
-    # Don't display the Windows GPF dialog if the invoked program dies.
-    # See comp.os.ms-windows.programmer.win32
-    #  How to suppress crash notification dialog?, Jan 14,2004 -
-    #     Raymond Chen's response [1]
 
-    import ctypes
-    SEM_NOGPFAULTERRORBOX = 0x0002 # From MSDN
-    ctypes.windll.kernel32.SetErrorMode(SEM_NOGPFAULTERRORBOX);
-    CREATE_NO_WINDOW = 0x08000000    # From Windows API
-    subprocess_flags = CREATE_NO_WINDOW
-else:
-    subprocess_flags = 0
+class TextureConversionError(RuntimeError):
+    pass
+
+
+def conversionArguments(kind, path):
+    path = Path(path).resolve()
+    executable = Path(__file__).resolve().parent / ("MHWorldTex.exe" if kind == "tex" else "TexConv.exe")
+    args = [str(executable), str(path)]
+    if kind == "dds":
+        if "NM" in path.name:
+            args += ["-sepalpha", "-f", "RGBA"]
+        args += ["-ft", "png", "-o", str(path.parent)]
+    return args
+
+
+def _convert(kind, path):
+    args = conversionArguments(kind, path)
+    if not Path(args[0]).is_file():
+        raise FileNotFoundError("Texture converter missing: " + args[0])
+    if not Path(args[1]).is_file():
+        raise FileNotFoundError("Texture input missing: " + args[1])
+    if os.name != 'nt':
+        raise TextureConversionError("Bundled texture conversion requires Windows; provide PNG textures")
+    try:
+        result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, shell=False, check=True, timeout=120,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise TextureConversionError("Texture conversion failed for %s: %s" % (args[1], exc)) from exc
+    output = Path(args[1]).with_suffix('.dds' if kind == 'tex' else '.png')
+    if not output.is_file():
+        raise TextureConversionError("Converter did not produce expected output: %s; %s" %
+                                     (output, result.stderr.decode(errors='replace')))
+    return str(output)
+
 
 def convertTexToDDS(path):
-    processLocation = os.path.join(os.path.dirname(__file__),"MHWorldTex.exe")
-    FNULL = open(os.devnull, 'w')
-    args = "\"" + processLocation + "\"" + " \"" + path + "\""
-    try:
-        subprocess.check_output(args, stdin=FNULL, stderr=FNULL, shell=False, creationflags=subprocess_flags)
-    except:
-        pass
-    
+    return _convert('tex', path)
+
+
 def convertDDSToPNG(path):
-    processLocation = os.path.join(os.path.dirname(__file__),"TexConv.exe")
-    FNULL = open(os.devnull, 'w')
-    #Horrible Hack
-    if "NM" in path:
-        hint = " -sepalpha -f RGBA"
-    else:
-        hint = ""    
-    args = "\"" + processLocation + "\"" + " \"" + path + "\"" + hint + " -ft png -o \""+os.path.dirname(path)+ "\""
-    try:
-        subprocess.check_output(args, stdin=FNULL, stderr=FNULL, shell=False, creationflags=subprocess_flags)
-    except Exception as e:
-        pass
+    return _convert('dds', path)

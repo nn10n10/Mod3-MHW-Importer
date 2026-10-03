@@ -29,9 +29,9 @@ class Mod3ToModel():
         model = Mod3.Mod3()
         try:
             model.marshall(Mod3File)
-        except:
+        except (ValueError, IndexError, KeyError) as exc:
             raise CorruptModel(
-                "Model does not adhere to Mod3 spec. If this file was produced by the previous importer try importing with LOD filtered to highest only.")
+                "Invalid MOD3: %s" % exc) from exc
         self.model = model
         self.api = Api
         self.calls = self.parseOptions(options)
@@ -112,23 +112,14 @@ class Mod3ToModel():
     def loadMaterial(self, matPath):
         self.material = Mrl3.MRL3()
         materialPath = matPath[:-5]+".mrl3"
-        try:
-            materialFile = open(materialPath, "rb")
-        except:
-            BlenderImporterAPI.dbg.write("\tNo MRL3 found in model directory")
-            raise
-        try:
+        with open(materialPath, "rb") as materialFile:
             self.material.marshall(materialFile)
-        except Exception as e:
-            BlenderImporterAPI.dbg.write("\tUnable to read corrupted MRL3.")
-            BlenderImporterAPI.dbg.write("\t\t%s." % str(e))
-            print(str(e))
-            raise
 
     def importTextures(self, c, chunkpath):
         try:
             self.loadMaterial(c.path)
-        except:
+        except (OSError, ValueError, IndexError, KeyError) as exc:
+            print("MRL3 import skipped: %s" % exc)
             return
         self.api.importTextures(lambda skinHash: materialPathForkingResolution(
             c.path, self.material[skinHash], chunkpath), c)
@@ -136,7 +127,8 @@ class Mod3ToModel():
     def importMaterials(self, c, chunkpath):
         try:
             self.loadMaterial(c.path)
-        except:
+        except (OSError, ValueError, IndexError, KeyError) as exc:
+            print("MRL3 import skipped: %s" % exc)
             return
         self.api.importMaterials(lambda skinHash, matType: materialPathForkingResolution(
             c.path, self.material.getMaterial(skinHash, matType), chunkpath), c)
@@ -162,7 +154,7 @@ def materialPathForkingResolution(modelPath, texturePath, chunkPath):
         chunkPath, texturePath), os.path.join(modelFolder, filename)]
     for path in pathCandidates:
         BlenderImporterAPI.dbg.write("\tAttempting: %s\n" % path)
-        if os.path.exists(path+".PNG"):
+        if os.path.exists(path+".png"):
             return path
         elif os.path.exists(path+".dds"):
             TextureConverter.convertDDSToPNG(path+".dds")

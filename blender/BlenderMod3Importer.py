@@ -242,8 +242,8 @@ class BlenderImporterAPI(ModellingAPI):
                 BlenderImporterAPI.dbg.write("\tAssigning Texture to Model\n")
                 BlenderImporterAPI.assignTexture(meshObject, textureData)
                 BlenderImporterAPI.dbg.write("\tAssigned Texture to Model\n")
-            except:
-                pass
+            except (OSError, ValueError, KeyError, RuntimeError) as exc:
+                print("Texture import failed for %s: %s" % (meshObject.name, exc))
 
     @staticmethod
     def setupMap(typing,setupFunction,qualifiedFetch,meshObject):
@@ -271,13 +271,13 @@ class BlenderImporterAPI(ModellingAPI):
                 currentNode = BlenderImporterAPI.setupMap(mapName,preapplyTree(mapFunc),qf,mo)
                 mainNode.send(currentNode)
             except Exception as e:
-                BlenderImporterAPI.dbg.write(str(e)+'\n')
+                print("Material map import warning: %s" % e)
                 mainNode.send("")
         try:
             finishSetup(nodeTree,next(mainNode))
             return
         except Exception as e:
-            BlenderImporterAPI.dbg.write(str(e)+'\n')
+            print("Material map import warning: %s" % e)
             return
 
     @staticmethod
@@ -512,6 +512,8 @@ class BlenderImporterAPI(ModellingAPI):
              
     @staticmethod
     def fetchTexture(filepath):
+        if filepath is None:
+            raise FileNotFoundError("No matching texture path")
         filepath = filepath+".png"
         BlenderImporterAPI.dbg.write("\t%s\n"%filepath)
         if os.path.exists(filepath):

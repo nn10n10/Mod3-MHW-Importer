@@ -19,7 +19,7 @@ except:
     from crc import CrcJamcrc
     from maptype import maptypeTranslation
 
-translation = lambda x: maptypeTranslation[x>>12]
+translation = lambda x: maptypeTranslation.get(x>>12, "UnknownMap_0x%x" % x)
 intBytes = lambda x: int.from_bytes(x, byteorder='little', signed=False)
 hex_read = lambda f,x: intBytes(f.read(x))
 
@@ -62,7 +62,10 @@ class MRL3ResourceBinding(CS.PyCStruct):
     def marshall(self, data):
         super().marshall(data)
         self.mapTypeName = translation(self.mapType)
-        self.resourceTypeName = self.resourceTypes[self.resourceType&0xF]
+        resource_type = self.resourceType & 0xF
+        if resource_type >= len(self.resourceTypes):
+            raise ValueError("Unknown MRL3 resource type")
+        self.resourceTypeName = self.resourceTypes[resource_type]
         
 
 class MRL3MaterialHeader(CS.PyCStruct):
@@ -94,6 +97,10 @@ class MRL3Material():
     def marshall(self, data):
         self.Header.marshall(data)
         pos = data.tell()
+        if self.Header.matSize < self.Header.floatArrayOffset*8:
+            raise ValueError("Invalid MRL3 parameter size")
+        if self.Header.startAddress + self.Header.matSize > len(data):
+            raise ValueError("MRL3 material payload outside file")
         data.seek(self.Header.startAddress)
         self.resourceBindings = [MRL3ResourceBinding() for _ in range(self.Header.floatArrayOffset*8//len(MRL3ResourceBinding()))]
         [arg.marshall(data) for arg in self.resourceBindings]
@@ -102,13 +109,13 @@ class MRL3Material():
         data.seek(pos)
         
     def serialize(self):
-        return self.Header.serialize()+b''.join(map(lambda x: x.serialize(),self.textureArguments))+self.paramArray.serialize()
+        return self.Header.serialize()+b''.join(map(lambda x: x.serialize(),self.resourceBindings))+self.paramArray.serialize()
     
     def getMapIndex(self, typing = "Albedo"):
         for resource in self.resourceBindings:
             if typing.upper() in resource.mapTypeName.upper():
                 return resource.texIdx
-        return -1 if not typing == "Albedo" else 1
+        return -1
     
 class MRL3():
     def __init__(self):
@@ -118,7 +125,14 @@ class MRL3():
         self.Typing = "Albedo"
         
     def marshall(self, file):
+        from ..common.FileLike import FileLike
+        if not isinstance(file, FileLike):
+            file = FileLike(file.read())
         self.Header.marshall(file)
+        for offset, count, size in [(self.Header.textureOffset, self.Header.textureCount, len(MRL3Texture())),
+                                    (self.Header.materialOffset, self.Header.materialCount, len(MRL3MaterialHeader()))]:
+            if offset > len(file) or count*size > len(file)-offset:
+                raise ValueError("MRL3 table outside file")
         file.seek(self.Header.textureOffset)
         self.Textures = [MRL3Texture() for _ in range(self.Header.textureCount)]
         [mat.marshall(file) for mat in self.Textures]
@@ -131,7 +145,7 @@ class MRL3():
         for material in self.Materials:
             if material.Header.materialNameHash == idHash:
                 index = material.getMapIndex(self.Typing)-1
-                if index < 0 or index > len(self.Textures):
+                if index < 0 or index >= len(self.Textures):
                     raise KeyError
                 return fixpath(self.Textures[index].path.replace("\x00",""))
         raise KeyError
