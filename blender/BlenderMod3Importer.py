@@ -43,7 +43,7 @@ class BoneGraph():
         for parentId in self.boneParentage:
             if parentId != 255:
                 self.bones[parentId].children += self.boneParentage[parentId]
-        self.roots = self.boneParentage[255]
+        self.roots = self.boneParentage.get(255, [])
         
     def root(self):
         return self.roots
@@ -96,12 +96,12 @@ class BlenderImporterAPI(ModellingAPI):
         bpy.ops.object.select_all(action='DESELECT')
         blenderArmature = bpy.data.armatures.new('%s Armature'%filename)
         arm_ob = bpy.data.objects.new('%s Armature'%filename, blenderArmature)
-        bpy.context.scene.objects.link(arm_ob)
-        bpy.context.scene.update()
-        arm_ob.select = True
-        arm_ob.show_x_ray = True
-        bpy.context.scene.objects.active = arm_ob
-        blenderArmature.draw_type = 'STICK'
+        bpy.context.collection.objects.link(arm_ob)
+        bpy.context.view_layer.update()
+        arm_ob.select_set(True)
+        arm_ob.show_in_front = True
+        bpy.context.view_layer.objects.active = arm_ob
+        blenderArmature.display_type = 'STICK'
         bpy.ops.object.mode_set(mode='EDIT')
         
         empty = BlenderImporterAPI.createParentBone(blenderArmature)
@@ -111,7 +111,7 @@ class BlenderImporterAPI(ModellingAPI):
             root.parent = empty
             #arm.pose.bones[ix].matrix
             
-        bpy.ops.object.editmode_toggle()
+        bpy.ops.object.mode_set(mode='OBJECT')
         BlenderImporterAPI.dbg.write("Loaded Armature\n")
         context.armature = miniscene
         context.skeleton = arm_ob
@@ -142,17 +142,15 @@ class BlenderImporterAPI(ModellingAPI):
             #Needs to enter object mode
             if meshpart["colour"]:
                 BlenderImporterAPI.dbg.write("\t\tLoading Colours\n")
-                vcol_layer = blenderMesh.vertex_colors.new()
-                for l,col in zip(blenderMesh.loops, vcol_layer.data):
-                    try:
-                        col.color = BlenderImporterAPI.mod3ToBlenderColour(meshpart["colour"][l.vertex_index])
-                    except:
-                        col.color = BlenderImporterAPI.mod3ToBlenderColour(meshpart["colour"][l.vertex_index])[:3]
+                vcol_layer = blenderMesh.color_attributes.new(name="Color", type='BYTE_COLOR', domain='CORNER')
+                for loop, col in zip(blenderMesh.loops, vcol_layer.data):
+                    col.color_srgb = BlenderImporterAPI.mod3ToBlenderColour(meshpart["colour"][loop.vertex_index])
             #UVs
             BlenderImporterAPI.dbg.write("\t\tLoading UVs\n")
             for ix, uv_layer in enumerate(meshpart["uvs"]):
                 uvLayer = BlenderImporterAPI.createTextureLayer("UV%d"%ix, blenderMesh, uv_layer)#BlenderImporterAPI.uvFaceCombination(uv_layer, meshpart["faces"]))
-                uvLayer.active = ix == 0
+                if ix == 0:
+                    blenderMesh.uv_layers.active_index = 0
                 BlenderImporterAPI.dbg.write("\t\tLayer Activated\n")
             BlenderImporterAPI.dbg.write("\tMeshpart Loaded\n")
             blenderMesh.update()
@@ -165,7 +163,7 @@ class BlenderImporterAPI(ModellingAPI):
     @staticmethod
     def clearSelection():
         for ob in bpy.context.selected_objects:
-            ob.select = False
+            ob.select_set(False)
      
     @staticmethod
     def linkEmptyTree(context):
@@ -180,13 +178,13 @@ class BlenderImporterAPI(ModellingAPI):
                 if not modifier.vertex_group:
                     ob.modifiers.remove(modifier)
                 else:
-                    bpy.context.scene.objects.active = ob
-                    ob.select = True
+                    bpy.context.view_layer.objects.active = ob
+                    ob.select_set(True)
                     bpy.ops.object.mode_set(mode = 'EDIT')
                     bpy.ops.object.hook_reset(modifier = armature[bone].name)
                     bpy.ops.object.mode_set(mode = 'OBJECT')
-                    ob.select = False
-                    bpy.context.scene.objects.active = None
+                    ob.select_set(False)
+                    bpy.context.view_layer.objects.active = None
 
     @staticmethod
     def linkArmature(context):
@@ -200,15 +198,18 @@ class BlenderImporterAPI(ModellingAPI):
     @staticmethod
     def clearScene(context):
         BlenderImporterAPI.dbg.write("Clearing Scene\n")
+        collections = (bpy.context.scene.collection, *bpy.context.scene.collection.children_recursive)
+        if any(collection.users > 1 for collection in collections):
+            raise ValueError("Cannot clear a scene with collections shared by other scenes")
         for key in list(bpy.context.scene.keys()):
             if type(bpy.context.scene[key]) != idprop.types.IDPropertyGroup:
                 del bpy.context.scene[key]
-        for obj in bpy.data.objects:
-            bpy.data.objects.remove(obj)
-        #bpy.ops.object.select_all(action='SELECT')
-        #bpy.ops.object.delete() 
-        for i in bpy.data.images.keys():
-            bpy.data.images.remove(bpy.data.images[i])
+        # Unlink only this scene's objects; preserve other scenes and shared images.
+        scene_objects = set(bpy.context.scene.objects)
+        for collection in collections:
+            for obj in list(collection.objects):
+                if obj in scene_objects:
+                    collection.objects.unlink(obj)
         BlenderImporterAPI.dbg.write("Scene Cleared\n")
         return
 
@@ -306,6 +307,8 @@ class BlenderImporterAPI(ModellingAPI):
             minBox = Vector([0,0,0])
             maxBox = Vector([0,0,0])
         span = max(max(maxBox-minBox)*2,10**3)
+        if bpy.context.screen is None:
+            return
         for a in bpy.context.screen.areas:
             if a.type == 'VIEW_3D':
                 for s in a.spaces:
@@ -348,32 +351,23 @@ class BlenderImporterAPI(ModellingAPI):
         blenderMesh.update()
         blenderObject = bpy.data.objects.new("%s LOD %d"%(name,meshpart["properties"]["lod"]), blenderMesh)
         BlenderImporterAPI.dbg.write("\t\t\tGeometry Link\n")
-        bpy.context.scene.objects.link(blenderObject)
+        bpy.context.collection.objects.link(blenderObject)
         return blenderMesh, blenderObject
     
     @staticmethod
     def setNormals(normals, meshpart):
         meshpart.update(calc_edges=True)
-        #meshpart.normals_split_custom_set_from_vertices(normals)
-        
-        clnors = array.array('f', [0.0] * (len(meshpart.loops) * 3))
-        meshpart.loops.foreach_get("normal", clnors)
+        if len(normals) != len(meshpart.vertices):
+            raise ValueError("Normal count does not match vertex count")
         meshpart.polygons.foreach_set("use_smooth", [True] * len(meshpart.polygons))
-        
-        #meshpart.normals_split_custom_set(tuple(zip(*(iter(clnors),) * 3)))
         meshpart.normals_split_custom_set_from_vertices([normalize(v) for v in normals])
-        #meshpart.normals_split_custom_set([normals[loop.vertex_index] for loop in meshpart.loops])
-        meshpart.use_auto_smooth = True
-        meshpart.show_edge_sharp = True
-        
-        #db
-    
+
     @staticmethod
     def normalCheck(meshpart):
         normals = {}
         for l in meshpart.loops:
             if l.vertex_index in normals and l.normal != normals[l.vertex_index]:
-                raise "Normal Abortion"
+                raise ValueError("Conflicting loop normals")
             else:
                 normals[l.vertex_index]=l.normal
         
@@ -399,9 +393,9 @@ class BlenderImporterAPI(ModellingAPI):
     def createRootNub(miniscene):
         o = bpy.data.objects.new("Root", None )
         miniscene[255]=o
-        bpy.context.scene.objects.link( o )
+        bpy.context.collection.objects.link( o )
         o.show_wire = True
-        o.show_x_ray = True
+        o.show_in_front = True
         return
         
     
@@ -415,16 +409,16 @@ class BlenderImporterAPI(ModellingAPI):
         name = "BoneFunction.%03d" % bone["CustomProperties"]["boneFunction"]
         o = bpy.data.objects.new(name, None )#ix
         miniscene[ix]=o
-        bpy.context.scene.objects.link( o )
+        bpy.context.collection.objects.link( o )
         #if bone["parentId"]!=255:
         parentName = bone["parentId"]
         if parentName not in miniscene:
-            BlenderImporterAPI.createNub(bone["parentId"],armature[bone["parentId"]],miniscene)
+            BlenderImporterAPI.createNub(bone["parentId"],armature[bone["parentId"]],armature,miniscene)
         o.parent = miniscene[parentName]
         
         o.matrix_local = BlenderImporterAPI.deserializeMatrix("LMatCol",bone)
         o.show_wire = True
-        o.show_x_ray = True
+        o.show_in_front = True
         o.show_bounds = True
         BlenderImporterAPI.parseProperties(bone["CustomProperties"],o.__setitem__)
         o["indexHint"] = ix# if preserveOrdering else -1
@@ -455,7 +449,7 @@ class BlenderImporterAPI(ModellingAPI):
         #    bone[prop] = obj[prop]
         if not parent_bone:
             parent_bone = BlenderImporterAPI.DummyBone()#matrix = Identity(4), #boneTail = 0,0,0, boneHead = 0,1,0
-        bone.matrix = parent_bone.matrix * obj.lmatrix
+        bone.matrix = parent_bone.matrix @ obj.lmatrix
         for child in obj.children:
             nbone = BlenderImporterAPI.createBone(armature, child, miniscene, bone)
             nbone.parent = bone
@@ -500,7 +494,7 @@ class BlenderImporterAPI(ModellingAPI):
                 groupName = "BoneFunction.%s"%groupId
                 for vertex,weight in group:
                     if groupName not in blenderObject.vertex_groups:
-                        blenderObject.vertex_groups.new(groupName)#blenderObject Maybe?
+                        blenderObject.vertex_groups.new(name=groupName)#blenderObject Maybe?
                     blenderObject.vertex_groups[groupName].add([vertex], weight, 'ADD')
         return
     
@@ -527,38 +521,24 @@ class BlenderImporterAPI(ModellingAPI):
     
     @staticmethod
     def assignTexture(meshObject, textureData):
-        for uvLayer in meshObject.data.uv_textures:
-            for uv_tex_face in uvLayer.data:
-                uv_tex_face.image = textureData
+        mat = bpy.data.materials.new(name=meshObject.name + "_Texture")
+        mat.use_nodes = True
+        meshObject.data.materials.append(mat)
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        tex_node = mat.node_tree.nodes.new(type="ShaderNodeTexImage")
+        tex_node.image = textureData
+        mat.node_tree.links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
         meshObject.data.update()
-        
+
     @staticmethod
     def createTextureLayer(name, blenderMesh, uv):#texFaces):
-        #if bpy.context.active_object.mode!='OBJECT':
-        #    bpy.ops.object.mode_set(mode='OBJECT')
-        BlenderImporterAPI.dbg.write("\t\tCreating new UV\n")
-        blenderMesh.uv_textures.new(name)
-        blenderMesh.update()
-        BlenderImporterAPI.dbg.write("\t\tCreating BMesh\n")
-        blenderBMesh = bmesh.new()
-        blenderBMesh.from_mesh(blenderMesh)
-        BlenderImporterAPI.dbg.write("\t\tAcquiring UV Layer\n")
-        uv_layer = blenderBMesh.loops.layers.uv[name]
-        blenderBMesh.faces.ensure_lookup_table()
-        BlenderImporterAPI.dbg.write("\t\tBMesh Face Count %d\n"%len(blenderBMesh.faces))
-        BlenderImporterAPI.dbg.write("\t\tStarting Looping\n")
-        BlenderImporterAPI.dbg.write("\t\tUV Vertices Count %d\n"%len(uv))
-        for face in blenderBMesh.faces:
-            for loop in face.loops:
-                #BlenderImporterAPI.dbg.write("\t%d\n"%loop.vert.index)
-                loop[uv_layer].uv = uv[loop.vert.index]
-        BlenderImporterAPI.dbg.write("\t\tUVs Edited\n") 
-        blenderBMesh.to_mesh(blenderMesh)
-        BlenderImporterAPI.dbg.write("\t\tMesh Written Back\n")
-        blenderMesh.update()
-        BlenderImporterAPI.dbg.write("\t\tMesh Updated\n")
-        return blenderMesh.uv_textures[name]
-    
+        if len(uv) != len(blenderMesh.vertices):
+            raise ValueError("UV count does not match vertex count")
+        layer = blenderMesh.uv_layers.new(name=name)
+        for loop in blenderMesh.loops:
+            layer.data[loop.index].uv = uv[loop.vertex_index]
+        return layer
+
     @staticmethod
     def uvFaceCombination(vertexUVMap, FaceList):
         BlenderImporterAPI.dbg.write("\t\tFaces %d %d - UV Count %d\n"%(min(map(min,FaceList)), max(map(max,FaceList)), len(vertexUVMap)))
@@ -578,8 +558,8 @@ class BlenderImporterAPI(ModellingAPI):
         constraint = lattice_ob.constraints.new("CHILD_OF")
         constraint.target = armature[box.bone()] if box.bone() in armature else None
         lattice["Type"] = "MOD3_BoundingBox_AABB"
-        bpy.context.scene.objects.link(lattice_ob)
-        bpy.context.scene.update()
+        bpy.context.collection.objects.link(lattice_ob)
+        bpy.context.view_layer.update()
         return lattice_ob
     
     @staticmethod
@@ -597,8 +577,8 @@ class BlenderImporterAPI(ModellingAPI):
             lattice_ob["bone_index"] = box.bone()
         constraint.target = armature[box.bone()] if box.bone() in armature else None
         lattice["Type"] = "MOD3_BoundingBox_MVBB"
-        bpy.context.scene.objects.link(lattice_ob)
-        bpy.context.scene.update()
+        bpy.context.collection.objects.link(lattice_ob)
+        bpy.context.view_layer.update()
         return lattice_ob
 
     @staticmethod

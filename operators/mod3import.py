@@ -34,7 +34,7 @@ class ImportMOD3(Operator, ImportHelper):
     clear_scene: BoolProperty(
         name = "Clear scene before import.",
         description = "Clears all contents before importing",
-        default = True)
+        default = False)
     maximize_clipping: BoolProperty(
         name = "Maximizes clipping distance.",
         description = "Maximizes clipping distance to be able to see all of the model at once.",
@@ -91,18 +91,14 @@ class ImportMOD3(Operator, ImportHelper):
         default = "Group")
 
     def execute(self,context):
-        try:
+        if context.object is not None and context.object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
-        except:
-            pass
-        bpy.ops.object.select_all(action='DESELECT')
-        Mod3File = FL.FileLike(open(self.properties.filepath,'rb').read())
+        with open(self.filepath, 'rb') as source:
+            Mod3File = FL.FileLike(source.read())
         BApi = Api.BlenderImporterAPI()
         options = self.parseOptions()
-        blenderContext = Context(self.properties.filepath,{},None)
-        with BlenderSupressor.SupressBlenderOps():
-            Mod3IL.Mod3ToModel(Mod3File, BApi, options).execute(blenderContext)
-            bpy.ops.object.select_all(action='DESELECT')
+        blenderContext = Context(self.filepath, [], None)
+        Mod3IL.Mod3ToModel(Mod3File, BApi, options).execute(blenderContext)
         #bpy.ops.object.mode_set(mode='OBJECT')
         #bpy.context.area.type = 'INFO'
         return {'FINISHED'}
