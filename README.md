@@ -5,7 +5,7 @@ Blender MOD3 importer/exporter for Monster Hunter: World. This maintenance branc
 
 - Minimum declared Blender version: 4.4. Tested executables: **Blender 4.4.3** (Python 3.11.11) and **Blender 5.2.2 LTS** (Python 3.13.13), Windows.
 - Blender 5.2.2 registration, API/safety and shader tests pass. The 18 binary/texture tests pass in ordinary Python and Blender's bundled Python. There are separate 16-case generated-export and 16-case opaque replay tests. Five supplied real MOD3 files import and preserve source→A→B byte-for-byte on both tested Blender versions.
-- **Development branch, NOT PR-ready:** ownership of imported bbox records remains unresolved. Real scene-fidelity tests reveal four non-degenerate corner-normal mismatches in the body sample; the full real-file runner therefore exits nonzero. The arm sample also has one normal mismatch on a zero-area face. Exact source replay preserves their original packed normal bytes, but does not establish visual fidelity. See [current compatibility report](docs/OPAQUE_BBOX_PRESERVATION.md), [audit status](docs/FIX_STATUS.md) and [validation](docs/VALIDATION.md).
+- **Development branch, NOT PR-ready:** ownership of imported bbox records remains unresolved. Blender 4.4.3 and 5.2.2 now reproduce correct body scene normals after the importer isolates two coincident, oppositely wound face pairs with sharp edges. The arm sample still has one normal mismatch on a zero-area face. Exact source replay preserves original packed normal bytes. See [current compatibility report](docs/OPAQUE_BBOX_PRESERVATION.md), [audit status](docs/FIX_STATUS.md) and [validation](docs/VALIDATION.md).
 
 ## Unresolved bounding-box preservation
 

@@ -32,18 +32,18 @@ Real-file results are identical on both tested versions:
 | Sample | Meshes | Bones | Vertices | Faces | Global records | Source=A=B full bytes | Scene normals |
 |---|---:|---:|---:|---:|---:|---|---|
 | arm | 2 | 135 | 9,078 | 11,972 | 23 | PASS | PARTIAL: one zero-area corner mismatch |
-| body | 2 | 135 | 8,767 | 13,669 | 23 | PASS | FAIL: four non-degenerate corner mismatches |
+| body | 2 | 135 | 8,767 | 13,669 | 23 | PASS | PASS: opposing duplicate-face pairs isolated with sharp edges |
 | helm | 1 | 90 | 8,566 | 13,675 | 195 | PASS | PASS |
 | leg | 1 | 90 | 8,566 | 13,675 | 195 | PASS | PASS |
 | wst | 1 | 58 | 994 | 1,799 | 23 | PASS | PASS |
 
 Global raw table, full original mesh headers and byte 41 are explicitly compared. Whole-file equality also proves parsed positions/normals/UV/colors/weights/skeleton/materials/LOD/bounds/header fields unchanged; no timestamp exclusion is needed for replay. Scene checks independently compare geometry, hierarchy/functions, weights and UV/colors against the existing import representation. Slash's representation of an implicit negative final weight is not a claim that Blender displays raw signed weights literally.
 
-## New finding M-21: real scene normal fidelity
+## M-21: real scene normal fidelity
 
-Body has four mismatches on two nonzero-area polygons (~0.010880956 and ~0.010880955). One source direction is `[0, 0.333984524, -0.942578554]`; Blender reports approximately `[-0.000016338, 0.003574392, 0.001251254]`. The root cause is not determined here. Arm has one mismatch on a zero-area polygon. Both reproduce in 4.4.3 and 5.2.2. This implementation does not change the normal API or weaken the comparison threshold.
+Body's four mismatches were on two coincident triangles with exactly reversed winding and shared vertices. Blender 4.4.3 and 5.2.2 both reproduce the issue in a minimal mesh: the shared split-normal fan cannot represent the supplied loop normals, while marking the pair's perimeter sharp makes every corner match. The importer now detects only triangle pairs with the same three vertex indices, exactly two faces for that key, and reversed directed edges; it marks those perimeter edges sharp before applying custom normals. The real body sample then has zero normal mismatches. The threshold is unchanged.
 
-The runner completes all file-preservation checks, records `preservation_status = PASS` independently, marks body's scene-normal check FAIL and then exits nonzero. The complete real-file suite is therefore **not all PASS**. Original packed normals remain byte-perfect on replay; edited unresolved scenes cannot invoke reconstruction. This finding is a scene-fidelity issue, not newly accepted bbox ownership or demonstrated corruption of exported replay files.
+Arm still has one corner-normal mismatch on a zero-area polygon in both versions. Marking all edges around zero-area polygons sharp made the problem worse in a probe, so the importer does not apply that broader workaround. The real runner reports arm scene normals as `PARTIAL`, with no nondegenerate mismatches. All five source → A → B runs preserve complete source bytes, raw bbox table and byte-41 mesh fields; geometry, skeleton, weights, UV/color and normal comparisons otherwise match. The runner exits successfully while retaining the arm PARTIAL status. Original packed normals remain byte-perfect on replay; edited unresolved scenes cannot invoke reconstruction.
 
 ## Feature matrix
 
@@ -54,7 +54,7 @@ The runner completes all file-preservation checks, records `preservation_status 
 | Mesh import | PASS | PASS | Scene topology/positions/counts checked |
 | Skeleton import | PASS | PASS | Real EmptyTree indices/hierarchy/functions checked; Armature synthetic |
 | Weights / UV / colors | PASS | PASS | Raw file preservation plus scene representation comparisons |
-| Normals | PARTIAL | PARTIAL | Body non-degenerate scene check FAIL; raw exported bytes PASS |
+| Normals | PARTIAL | PARTIAL | Body PASS after opposing-face edge split; arm has one zero-area-face mismatch; raw exported bytes PASS |
 | Global bbox preservation | PASS | PASS | Raw records/order/full source exact |
 | Bbox ownership / editable reconstruction | UNTESTED | UNTESTED | Unknown; no mapping inferred, edits refused |
 | MRL3 parsing | PASS | PASS | Earlier three real files; unchanged by this patch |
@@ -67,6 +67,6 @@ The runner completes all file-preservation checks, records `preservation_status 
 
 ## PR gates and remaining work
 
-Registration, synthetic encoder/replay, real import, unchanged real semantic stability, private-asset exclusion and accurate README gates pass for this scoped preservation path. No known newly introduced HIGH/CRITICAL silent-write issue was observed in it; this is not certification of arbitrary reconstructed scenes. **NOT PR-ready:** M-21 remains an explicit failing real scene-fidelity test, and the new fingerprint/guard policy needs independent final review. Ownership is still uncertain; editable real-file export remains intentionally unsupported until independently justified.
+Registration, synthetic encoder/replay, real import, unchanged real semantic stability, private-asset exclusion and accurate README gates pass for this scoped preservation path. No known newly introduced HIGH/CRITICAL silent-write issue was observed in it; this is not certification of arbitrary reconstructed scenes. **NOT PR-ready:** arm retains one zero-area-face scene-normal limitation; the opaque baseline/guard policy needs independent final review; and bbox ownership remains uncertain, so edited real-file export remains unsupported.
 
-Next work is a separate normal-fidelity investigation/review and final correctness review of this diff. Converter/game checks and redistribution-license questions remain release limitations. No push or PR was performed. Historical second-stage findings are retained in SECOND_STAGE_BBOX_AND_BLENDER52.md; this report supersedes its current-status statements.
+Next work is final correctness review of the sharp-edge normal fix and opaque guard policy; decide whether the arm zero-area-face limitation is acceptable for contribution. Converter/game checks and redistribution-license questions remain release limitations. No push or PR was performed. Historical second-stage findings are retained in SECOND_STAGE_BBOX_AND_BLENDER52.md; this report supersedes its current-status statements.

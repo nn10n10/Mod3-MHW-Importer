@@ -41,15 +41,15 @@
 | L-02 | LOW | 未修复 / 未验证 | 保留在审计清单，不宣称完成；不得据此发布已验证版本。 |
 | L-03 | LOW | 未修复 / 未验证 | 保留在审计清单，不宣称完成；不得据此发布已验证版本。 |
 | L-04 | LOW | 部分处理 / 已知限制 | requiredProperties 已修正；未使用的 BoneMap.unfold 仍需独立处理。 |
-| T-01 | TEST GAP | 部分处理 / 已知限制 | 替换旧测试入口，真实 Blender operators 合成回归通过；真实文件原样保留回归通过；body 场景 normal 保真仍失败。 |
-| T-02 | TEST GAP | 部分处理 / 已知限制 | 五个真实 MOD3 可导入，source/A/B 完整 binary 相同；body 场景 normal 检查仍 FAIL，完整 runner 返回非零。 |
+| T-01 | TEST GAP | 部分处理 / 已知限制 | 替换旧测试入口；真实 operators 合成回归及五个真实文件原样保留回归通过；arm 有一个退化面 normal 限制。 |
+| T-02 | TEST GAP | 部分处理 / 已知限制 | 五个真实 MOD3 在 4.4.3/5.2.2 可导入，source/A/B 完整 binary 相同；body normals PASS，arm normals PARTIAL。 |
 | T-03 | TEST GAP | 未修复 / 未验证 | 保留在审计清单，不宣称完成；不得据此发布已验证版本。 |
 | H-20 | HIGH | 安全隔离；ownership 未确定 | 保存完整 global table/raw headers，未知关系不分配；未编辑场景原样导出，相关编辑明确拒绝。 |
-| M-21 | MEDIUM | 新发现 / 未修复 | body 有四个非退化 corner normal 差异，arm 一个退化面差异；4.4.3/5.2.2 均复现。原样导出保留 packed bytes，场景保真仍失败。 |
+| M-21 | MEDIUM | 部分修复 / 已知限制 | body 的两个反向重叠三角面组已通过 sharp perimeter 隔离，4.4.3/5.2.2 场景 normal 回归通过；arm 仍有一个零面积面 corner normal 差异。 |
 
 ## 当前后续工作
 
-1. 独立调查 M-21 场景 normal 保真问题；本次没有扩大范围修 normals，也没有降低阈值。
+1. 复核 M-21 的反向重叠面兼容处理，并评估 arm 零面积面限制；未降低比较阈值。
 2. 对新增 snapshot/fingerprint/guard 和原样导出策略做独立 correctness review。
 3. ownership 仍不确定；编辑后真实 MOD3 重建导出需要独立格式证据，不允许猜测或提供绕过开关。
 4. 实际验证 Windows TEX/DDS 转换与游戏加载/外观；本次未执行 EXE。

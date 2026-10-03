@@ -366,6 +366,21 @@ class BlenderImporterAPI(ModellingAPI):
             raise ValueError("Normal count does not match vertex count")
         if any(not all(math.isfinite(value) for value in normal) or not any(normal) for normal in normals):
             raise ValueError("Non-finite or zero-length custom normal")
+        faces_by_vertices = {}
+        for polygon in meshpart.polygons:
+            if len(polygon.vertices) == 3:
+                faces_by_vertices.setdefault(tuple(sorted(polygon.vertices)), []).append(polygon)
+        for faces in faces_by_vertices.values():
+            if len(faces) != 2:
+                continue
+            first_vertices, second_vertices = tuple(faces[0].vertices), tuple(faces[1].vertices)
+            first_edges = set(zip(first_vertices, first_vertices[1:] + first_vertices[:1]))
+            second_edges = set(zip(second_vertices, second_vertices[1:] + second_vertices[:1]))
+            if all((b, a) in second_edges for a, b in first_edges):
+                # Opposing coincident faces make Blender's shared split-normal fan ambiguous.
+                for polygon in faces:
+                    for loop_index in polygon.loop_indices:
+                        meshpart.edges[meshpart.loops[loop_index].edge_index].use_edge_sharp = True
         meshpart.polygons.foreach_set("use_smooth", [True] * len(meshpart.polygons))
         meshpart.normals_split_custom_set_from_vertices([normalize(v) for v in normals])
 

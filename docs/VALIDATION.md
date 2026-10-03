@@ -1,6 +1,6 @@
 # Validation record — historical phases
 
-Current scoped results (2026-10-04): [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md). 18 binary/texture tests pass; both Blender versions pass API suites, 16 generated exports, 16 synthetic replays and five real byte-perfect replays. The complete real scene-fidelity runner exits nonzero due to body corner normals; arm has a degenerate-face limitation. The table below records the earlier pre-preservation phase and is retained as history.
+Current scoped results (2026-10-04): [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md). 18 binary/texture tests pass; both Blender versions pass API suites, 16 generated exports, 16 synthetic replays and five real byte-perfect replays. All five real scene checks pass except one degenerate-face normal in arm, reported PARTIAL; body corner normals now pass. The table below records the earlier pre-preservation phase and is retained as history.
 
 | Check | Environment | Result |
 |---|---|---|

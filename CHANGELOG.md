@@ -9,5 +9,6 @@
 - Preserve material ordering and packed weight flags; named Principled sockets and RGB Color nodes.
 - Strict MRL3 lookups; visible converter failures, argv paths and bounded execution.
 - Runnable binary tests and real Blender operator regression suite.
+- Split custom-normal fans across coincident oppositely wound triangle pairs; the real body sample now matches source normals in Blender 4.4.3 and 5.2.2.
 
-API/safety and synthetic coverage ran on Blender 4.4.3 and 5.2.2 LTS. Five supplied real MOD3 models fail the per-mesh bbox association assumption; old 4.4.3 imports geometry while upstream silently assigns only available boxes. The physical table fits its section exactly; ownership semantics remain unresolved and block release. Converter binaries and game behavior remain untested. See docs/FIX_STATUS.md and docs/VALIDATION.md. No license grant is added.
+API/safety and synthetic coverage ran on Blender 4.4.3 and 5.2.2 LTS. Five supplied real MOD3 models import and unchanged source/A/B replay preserves complete source bytes. Bbox ownership remains unresolved, so edits still block export; arm also has one zero-area-face normal limitation. Converter binaries and game behavior remain untested. See docs/FIX_STATUS.md and docs/VALIDATION.md. No license grant is added.
