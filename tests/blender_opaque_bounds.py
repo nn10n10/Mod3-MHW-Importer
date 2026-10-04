@@ -15,7 +15,7 @@ sys.dont_write_bytecode = True
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root.parent))
 sys.path.insert(0, str(root / 'tests'))
-from fixtures import opaque_fixture
+from fixtures import opaque_fixture, parse
 
 addon = importlib.import_module(root.name)
 addon.register()
@@ -73,6 +73,27 @@ else:
         unchanged()
         results.append('raw_preservation_%s_%d' % (fields, count))
     source.write_bytes(opaque_fixture())
+    broken = parse(source.read_bytes())
+    for vertex in broken.MeshParts.Meshes[1].Vertices:
+        vertex.normal.x = vertex.normal.y = vertex.normal.z = 0
+    source.write_bytes(broken._serializeCurrent())
+    try:
+        load()
+    except RuntimeError as exc:
+        assert 'zero-length custom normal' in str(exc)
+    else:
+        raise AssertionError('Invalid second mesh unexpectedly imported')
+    assert len([o for o in bpy.context.scene.objects if o.type == 'MESH']) == 2
+    # Deleting the unfinished mesh previously enabled unguarded reconstruction.
+    for obj in list(bpy.context.scene.objects):
+        if obj.type == 'MESH' and not obj.data.uv_layers:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    packed = bpy.data.texts[bpy.context.scene[opaque.LINK]].as_string()
+    payload = json.loads(opaque.zlib.decompress(opaque.base64.b64decode(packed)))
+    assert payload['complete'] is False
+    assert opaque.base64.b64decode(payload['source']) == source.read_bytes()
+    refused('failed_import_partial_scene')
+    source.write_bytes(opaque_fixture())
     mutations = {
         'positions': lambda m: setattr(m.data.vertices[0].co, 'x', 0.125),
         'topology': lambda m: m.data.clear_geometry(),
@@ -122,7 +143,7 @@ else:
     load()
     bpy.ops.wm.save_as_mainfile(filepath=str(out / 'opaque.blend'))
     # Separate process genuinely closes/reopens the serialized .blend baseline.
-    child = subprocess.run([bpy.app.binary_path, '--background', str(out / 'opaque.blend'),
+    child = subprocess.run([bpy.app.binary_path, '--background', '--factory-startup', str(out / 'opaque.blend'),
                             '--python-exit-code', '1', '--python', str(Path(__file__).resolve()),
                             '--', '--output', str(out), '--reopen'],
                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
@@ -152,7 +173,7 @@ else:
         load()
         unchanged()
         bpy.ops.wm.save_as_mainfile(filepath=str(private / 'opaque.blend'))
-        child = subprocess.run([bpy.app.binary_path, '--background', str(private / 'opaque.blend'),
+        child = subprocess.run([bpy.app.binary_path, '--background', '--factory-startup', str(private / 'opaque.blend'),
                                 '--python-exit-code', '1', '--python', str(Path(__file__).resolve()),
                                 '--', '--output', str(private), '--reopen'],
                                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)

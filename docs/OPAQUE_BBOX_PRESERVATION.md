@@ -24,7 +24,7 @@ All checks finish before atomic output writing. Refusal tests confirm existing d
 - Five existing Blender API/safety/material suites PASS in Blender 4.4.3 and 5.2.2.
 - Separate generated-export test: 16 synthetic scenes with explicitly supplied fixture ownership reconstruct byte-identically except creationDate in both versions. This exercises the actual encoder, not replay, without inferring ownership from input byte 41.
 - Opaque replay: 16 synthetic operator source→A→B cases PASS in both versions.
-- Guard tests cover 0+0/23, 0+60/23, 12/195, duplicate bones, edited positions/topology/weights/order/identity/count/LOD/UV/colors/normals, bone hierarchy/index/rest/pose, transforms/modifiers/instancing, unknown properties, damaged/missing baseline and incomplete imports. Synthetic save/close/reopen succeeds in separate processes in both versions; editing reopened geometry refuses export. Blender 5.2 additionally passes real-model save/close/reopen with 195 records.
+- Guard tests cover 0+0/23, 0+60/23, 12/195, duplicate bones, edited positions/topology/weights/order/identity/count/LOD/UV/colors/normals, bone hierarchy/index/rest/pose, transforms/modifiers/instancing, unknown properties, damaged/missing baseline and incomplete or interrupted imports. The suite has 30 default cases; both versions pass 31 cases when the optional 195-record real-model save/close/reopen test is included. Synthetic and real save/reopen succeed in separate processes; editing reopened geometry refuses export.
 - No converters executed, no assets downloaded, no private asset or `.blend` committed.
 
 Real-file results are identical on both tested versions:
@@ -36,6 +36,8 @@ Real-file results are identical on both tested versions:
 | helm | 1 | 90 | 8,566 | 13,675 | 195 | PASS | PASS |
 | leg | 1 | 90 | 8,566 | 13,675 | 195 | PASS | PASS |
 | wst | 1 | 58 | 994 | 1,799 | 23 | PASS | PASS |
+
+These are five local file paths, not five unique binary fixtures: helm and leg have identical source bytes.
 
 Global raw table, full original mesh headers and byte 41 are explicitly compared. Whole-file equality also proves parsed positions/normals/UV/colors/weights/skeleton/materials/LOD/bounds/header fields unchanged; no timestamp exclusion is needed for replay. Scene checks independently compare geometry, hierarchy/functions, weights and UV/colors against the existing import representation. Slash's representation of an implicit negative final weight is not a claim that Blender displays raw signed weights literally.
 
@@ -65,12 +67,22 @@ Arm still has one corner-normal mismatch on a zero-area polygon in both versions
 | Real unchanged-file round-trip | PASS | PASS | Five complete binary-identical source/A/B files |
 | Game-side validation | UNTESTED | UNTESTED | No game execution |
 
+## H-21: interrupted-import export bypass (fixed)
+
+The final review reproduced a HIGH-severity failure path on Blender 5.2.2. A synthetic two-mesh source with valid global bbox layout and a zero-length normal in its second mesh failed during scene construction. The old guard was created only after all import steps succeeded. Removing the unfinished mesh then allowed the remaining partial scene to reconstruct and replace an existing output file, discarding the unresolved global metadata.
+
+Affected code: `mod3/Mod3ImporterLayer.py`, `Mod3ToModel.execute`, and the guard ordering in `blender/BlenderOpaqueBounds.py`, `capture`. Blender 4.4.3 uses the same exposed execution path; the pre-fix overwrite was directly reproduced on 5.2.2. Silent data loss was possible. Both versions now have a passing regression in `tests/blender_opaque_bounds.py` (`failed_import_partial_scene`).
+
+Import execution now captures its baseline in `finally`; a failed import is always incomplete. Snapshot capture establishes the scene guard before assigning identities or fingerprinting. The original import exception propagates. The Blender regression asserts that all source bytes survive, then deletes the unfinished mesh and checks that export is refused, existing destination bytes are unchanged and no temporary output is leaked. Both tested Blender versions pass this regression. No ownership interpretation was changed.
+
+Final test artifacts are outside the repository in workspace siblings `final-pr-review-44/` and `final-pr-review-52/`. Reopen subprocesses use factory startup so the user's separately installed add-on cannot replace operators or introduce shutdown errors. The deliberately invalid normal regression emits an expected import traceback; it is not a successful-import failure. The Blender 5.2 material deprecation warning remains documented.
+
 ## PR gates and remaining work
 
 The conservative compatibility PR gates pass:
 
 - **Blender 5.2 add-on registration:** PASS — repeated register/unregister/reload and operators.
-- **Synthetic import/export round-trip:** PASS — 16 generated scenes and 16 opaque replay cases; 29 guard cases.
+- **Synthetic import/export round-trip:** PASS — 16 generated scenes and 16 opaque replay cases; 31 preservation/guard cases with optional real save/reopen.
 - **Real MOD3 import:** PASS — all five local samples import on Blender 4.4.3 and 5.2.2.
 - **Unchanged real-file round-trip:** PASS — source, A and B are byte-identical for all five samples; bbox records and raw mesh headers are checked.
 - **Fail-closed edited export:** PASS — geometry, weights, bones, ordering, metadata, incomplete import, damaged baseline and save/reopen edits are refused before destination replacement.

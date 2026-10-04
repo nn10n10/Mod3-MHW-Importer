@@ -26,6 +26,6 @@ git diff --check
 
 ## 将来贡献
 
-先完成 docs/FIX_STATUS.md 的阻塞项。准备好后，你明确同意才创建自己的 GitHub fork、添加其为 `origin`、登录、push 本分支、打开指向原作者 master 的 PR。不要向 upstream 直接推送，不用 force push。当前 PR_DESCRIPTION_DRAFT.md 是本地草稿。
+当前保守兼容范围已达到本地可提交状态；准确范围与剩余限制见 docs/OPAQUE_BBOX_PRESERVATION.md。你明确同意后才创建自己的 GitHub fork、添加其为 `origin`、登录并 push 本分支；创建 PR 也需要你的明确授权。不要向 upstream 直接推送，不用 force push。当前 PR_DESCRIPTION_DRAFT.md 是本地草稿。
 
 旧样本、备份和 audit-artifacts 位于仓库外；测试资产不提交。提交历史中的每个修复可通过 `git show 提交号` 独立查看；现有记录已按逻辑拆分，没有复制旧目录或用一个巨大 AI 修复提交覆盖所有内容。

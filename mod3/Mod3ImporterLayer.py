@@ -42,21 +42,25 @@ class Mod3ToModel():
         import bpy
         from ..blender import BlenderOpaqueBounds
         existing = set(bpy.context.scene.objects)
-        # self.api.resetContext(context)
-        for call in self.calls:
-            call(context)
-            # self.api.resetContext(context)
-        if self.model.MeshParts.ownershipState == 'unresolved':
-            options = self.importOptions
-            complete = (not existing.intersection(bpy.context.scene.objects)
-                        and "Mesh Parts" in options and "Only Highest LOD" not in options
-                        and options.get("Split Weights") == "Slash"
-                        and (not self.model.Header.boneCount or options.get("Skeleton") in {"EmptyTree", "Armature"})
-                        and len(context.meshes) == self.model.Header.meshCount)
-            try:
-                BlenderOpaqueBounds.capture(self.sourceBytes, context, complete)
-            except (ValueError, TypeError, RuntimeError) as exc:
-                print("MOD3: geometry imported, opaque export blocked: %s" % exc)
+        finished = False
+        try:
+            for call in self.calls:
+                call(context)
+            finished = True
+        finally:
+            # Failed imports can leave scene objects behind. They must never
+            # escape the unresolved-data guard and enter reconstructed export.
+            if self.model.MeshParts.ownershipState == 'unresolved':
+                options = self.importOptions
+                complete = (finished and not existing.intersection(bpy.context.scene.objects)
+                            and "Mesh Parts" in options and "Only Highest LOD" not in options
+                            and options.get("Split Weights") == "Slash"
+                            and (not self.model.Header.boneCount or options.get("Skeleton") in {"EmptyTree", "Armature"})
+                            and len(context.meshes) == self.model.Header.meshCount)
+                try:
+                    BlenderOpaqueBounds.capture(self.sourceBytes, context, complete)
+                except (ValueError, TypeError, RuntimeError) as exc:
+                    print("MOD3: opaque export blocked: %s" % exc)
 
     def parseOptions(self, options):
         execute = []

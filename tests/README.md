@@ -24,6 +24,8 @@ Known gaps: real models complete byte-preserving replay; body scene normals now 
 
 Opaque bbox regressions use independent count patterns (0+0/23, 0+60/23 and 12/195), duplicate bone indices and nondefault opaque spacers. Corrupt physical counts/bounds/truncation still fail. The Blender guard runner checks edits/refusal/unchanged destination and launches a separate Blender process to reopen the saved `.blend`. To additionally test a private large real snapshot, append `--reopen-sample 'D:\private\model.mod3'` to that runner.
 
+The guard runner also triggers a genuine import failure in the second synthetic mesh, removes that unfinished mesh and verifies that partial-scene export remains blocked with all original bytes retained. There are 30 default preservation/guard cases, or 31 with the optional real save/reopen check.
+
 Use `--samples DIR` or `MHW_MOD3_TEST_DATA` for local-only real round-trips. Unresolved replay must satisfy **source == A == B for the complete file**, plus explicit global raw bbox and complete raw mesh-header comparisons. Scene counts/topology/positions/bone hierarchy/functions/weights/UV/colors/normals are checked separately. `preservation_status` and `scene_normals_status` prevent exact replay from concealing preview-fidelity failures. The five real-file cases pass on Blender 4.4.3 and 5.2.2; body normals pass, and arm is PARTIAL because one source normal belongs to a zero-area face. The comparison threshold was not relaxed.
 
 `blender_generated_roundtrip.py` separately creates 16 synthetic scenes from explicitly known fixture ownership and exercises the normal encoder. Outputs match fixture bytes except creationDate; it does not infer parsed-file ownership or bypass unresolved guards.

@@ -148,11 +148,11 @@ def fingerprint(scene):
 
 def capture(source, context, complete):
     scene = bpy.context.scene
+    scene[GUARD] = "unresolved"
+    # Establish the guard before any snapshot work can fail.
+    scene[LINK] = "missing"
     for obj in scene.objects:
         obj[IDENTITY] = uuid.uuid4().hex
-    scene[GUARD] = "unresolved"
-    # Establish a guard before fingerprinting: unsupported scenes remain blocked.
-    scene[LINK] = "missing"
     payload = {"version": 1, "complete": complete, "source": base64.b64encode(source).decode('ascii')}
     try:
         payload["fingerprint"] = fingerprint(scene)

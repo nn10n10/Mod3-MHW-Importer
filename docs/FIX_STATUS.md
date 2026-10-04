@@ -46,6 +46,7 @@
 | T-03 | TEST GAP | 未修复 / 未验证 | 保留在审计清单，不宣称完成；不得据此发布已验证版本。 |
 | H-20 | HIGH | 安全隔离；ownership 未确定 | 保存完整 global table/raw headers，未知关系不分配；未编辑场景原样导出，相关编辑明确拒绝。 |
 | M-21 | MEDIUM | 部分修复 / 已知限制 | body 的两个反向重叠三角面组已通过 sharp perimeter 隔离，4.4.3/5.2.2 场景 normal 回归通过；arm 仍有一个零面积面 corner normal 差异。 |
+| H-21 | HIGH | 已修复；双版 Blender 回归通过 | 中途失败的 unresolved 导入原先未建立 guard，删除未完成 mesh 后可错误重建导出；现用 finally 保存 incomplete baseline，导出在覆盖目标前拒绝。原始导入异常仍保留。 |
 
 ## 当前范围结论
 

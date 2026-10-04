@@ -2,7 +2,7 @@
 
 ## Current conservative-scope results (2026-10-04)
 
-The authoritative current report is [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md). The five private real files import in Blender 4.4.3 and 5.2.2; unchanged source -> A -> B replay is byte-identical, including bbox records and original mesh headers. Both runtimes pass the current API/safety/material tests, 16 generated-export cases, 29 opaque guard cases and 21 round-trip cases. The 18 ordinary Python tests pass. Scene normals are PARTIAL only for one zero-area-face corner in arm; the other four real samples pass. These results establish unchanged-file preservation, not edited real-file reconstruction or game-side correctness.
+The authoritative current report is [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md). The five private real files import in Blender 4.4.3 and 5.2.2; unchanged source -> A -> B replay is byte-identical, including bbox records and original mesh headers. Both runtimes pass the current API/safety/material tests, 16 generated-export cases, 31 opaque preservation/guard cases (including real save/reopen) and 21 round-trip cases. The 18 ordinary Python tests pass. Scene normals are PARTIAL only for one zero-area-face corner in arm; the other four real samples pass. These results establish unchanged-file preservation, not edited real-file reconstruction or game-side correctness.
 
 The sections below are historical records from before opaque bbox preservation was implemented. Their statements that real files were rejected describe that earlier revision and are superseded by the current report linked above.
 
