@@ -26,6 +26,6 @@ git diff --check
 
 ## 将来贡献
 
-当前保守兼容范围已达到本地可提交状态；准确范围与剩余限制见 docs/OPAQUE_BBOX_PRESERVATION.md。你明确同意后才创建自己的 GitHub fork、添加其为 `origin`、登录并 push 本分支；创建 PR 也需要你的明确授权。不要向 upstream 直接推送，不用 force push。当前 PR_DESCRIPTION_DRAFT.md 是本地草稿。
+主维护目标是 `nn10n10/Mod3-MHW-Importer`；原作者 `AsteriskAmpersand/Mod3-MHW-Importer` 仍作为 `upstream` 参考。当前公开的 nn10n10 `master` 仍指向 upstream 基线；本地 `blender-5.2-compat` 尚未 push，且没有配置个人 fork 的 remote。发布前确认目标账号权限后，将其设为 `origin` 并 push 维护分支。上游 PR 是可选工作，需要另行明确决定。不要向 upstream 直接推送，不用 force push。当前 PR_DESCRIPTION_DRAFT.md 仅是可选草稿。
 
 旧样本、备份和 audit-artifacts 位于仓库外；测试资产不提交。提交历史中的每个修复可通过 `git show 提交号` 独立查看；现有记录已按逻辑拆分，没有复制旧目录或用一个巨大 AI 修复提交覆盖所有内容。
