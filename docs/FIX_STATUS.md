@@ -1,4 +1,4 @@
-# 修复状态与提交阻塞项
+# 修复状态与剩余限制
 
 本文件区分实现修复、拒绝不支持的输入、尚未验证和未修复。第一轮行号指 upstream 原始代码。
 
@@ -47,16 +47,19 @@
 | H-20 | HIGH | 安全隔离；ownership 未确定 | 保存完整 global table/raw headers，未知关系不分配；未编辑场景原样导出，相关编辑明确拒绝。 |
 | M-21 | MEDIUM | 部分修复 / 已知限制 | body 的两个反向重叠三角面组已通过 sharp perimeter 隔离，4.4.3/5.2.2 场景 normal 回归通过；arm 仍有一个零面积面 corner normal 差异。 |
 
-## 当前后续工作
+## 当前范围结论
 
-1. 复核 M-21 的反向重叠面兼容处理，并评估 arm 零面积面限制；未降低比较阈值。
-2. 对新增 snapshot/fingerprint/guard 和原样导出策略做独立 correctness review。
-3. ownership 仍不确定；编辑后真实 MOD3 重建导出需要独立格式证据，不允许猜测或提供绕过开关。
-4. 实际验证 Windows TEX/DDS 转换与游戏加载/外观；本次未执行 EXE。
-5. 解决 license/二进制许可及 upstream 支持版本策略。
+保守兼容 PR 已按 Blender 5.2 导入与未修改真实文件原样往返的范围完成实现、回归和复核。未知 bbox ownership 不阻止导入；所有可能使 opaque 数据失效的编辑都在写目标文件前被拒绝。该 PR 不提供编辑后真实 MOD3 的重建导出。
+
+## 剩余限制（不是本兼容范围的通过条件）
+
+1. arm 样本仍有一个位于零面积面的 corner normal 差异；标记所有退化面边为 sharp 会使更多法线出错，因此维持已记录的 PARTIAL，不降低阈值。
+2. 未运行 Windows TEX/DDS 转换器，也未进行游戏内加载/外观验证；发布前可另行安排这些集成测试。
+3. upstream 没有顶层 license 声明；本分支不增加授权，发布分发前需维护者澄清源码和二进制许可。
+4. 如未来要支持编辑后真实文件导出，需要新的可靠格式证据证明 bbox ownership；此前保持拒绝，不猜测、不提供绕过开关。
 
 ## 当前数据安全边界
 
 未修改、完整导入的 unresolved 模型写回整个原始文件，五个真实 source/A/B 完整 bytes 一致；相关编辑、丢失/篡改 baseline 或无法验证的设置在写入前失败。这防止本路径把 Blender 的 normal 差异写回源文件。它不证明任意重建、格式变体或游戏外观正确。
 
-最新实现、结果、限制和 gate 见 [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md)。历史调查保留于 [SECOND_STAGE_BBOX_AND_BLENDER52.md](SECOND_STAGE_BBOX_AND_BLENDER52.md)。当前 **NOT PR-ready**。
+最新实现、结果、限制和 gate 见 [OPAQUE_BBOX_PRESERVATION.md](OPAQUE_BBOX_PRESERVATION.md)。历史调查保留于 [SECOND_STAGE_BBOX_AND_BLENDER52.md](SECOND_STAGE_BBOX_AND_BLENDER52.md)。当前 **PR-ready for the documented conservative compatibility scope; no PR has been created**。

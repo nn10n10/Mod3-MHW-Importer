@@ -67,6 +67,14 @@ Arm still has one corner-normal mismatch on a zero-area polygon in both versions
 
 ## PR gates and remaining work
 
-Registration, synthetic encoder/replay, real import, unchanged real semantic stability, private-asset exclusion and accurate README gates pass for this scoped preservation path. No known newly introduced HIGH/CRITICAL silent-write issue was observed in it; this is not certification of arbitrary reconstructed scenes. **NOT PR-ready:** arm retains one zero-area-face scene-normal limitation; the opaque baseline/guard policy needs independent final review; and bbox ownership remains uncertain, so edited real-file export remains unsupported.
+The conservative compatibility PR gates pass:
 
-Next work is final correctness review of the sharp-edge normal fix and opaque guard policy; decide whether the arm zero-area-face limitation is acceptable for contribution. Converter/game checks and redistribution-license questions remain release limitations. No push or PR was performed. Historical second-stage findings are retained in SECOND_STAGE_BBOX_AND_BLENDER52.md; this report supersedes its current-status statements.
+- **Blender 5.2 add-on registration:** PASS — repeated register/unregister/reload and operators.
+- **Synthetic import/export round-trip:** PASS — 16 generated scenes and 16 opaque replay cases; 29 guard cases.
+- **Real MOD3 import:** PASS — all five local samples import on Blender 4.4.3 and 5.2.2.
+- **Unchanged real-file round-trip:** PASS — source, A and B are byte-identical for all five samples; bbox records and raw mesh headers are checked.
+- **Fail-closed edited export:** PASS — geometry, weights, bones, ordering, metadata, incomplete import, damaged baseline and save/reopen edits are refused before destination replacement.
+- **No known HIGH/CRITICAL silent-write issue in the scoped path:** PASS — unresolved real-file edits do not reach reconstruction; unknown records are replayed only from the unchanged full source. Arbitrary scripts that remove or fabricate all guards are outside the documented threat model.
+- **No private game assets committed / limitations documented:** PASS.
+
+**PR-ready for this conservative compatibility scope; not a claim that edited real MOD3 reconstruction is supported.** The arm zero-area-face normal mismatch is documented as PARTIAL, and no threshold was relaxed. TEX conversion, game-side validation and upstream license clarification remain release/maintenance limitations. No push or PR was performed. Historical second-stage findings are retained in SECOND_STAGE_BBOX_AND_BLENDER52.md; this report supersedes its current-status statements.
